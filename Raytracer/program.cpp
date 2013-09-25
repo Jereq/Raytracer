@@ -62,7 +62,12 @@ void printDeviceInfo(cl::Device& dev)
 	std::cout << "  Max samplers              : " << dev.getInfo<CL_DEVICE_MAX_SAMPLERS>() << std::endl;
 	std::cout << "  Max work group size       : " << dev.getInfo<CL_DEVICE_MAX_WORK_GROUP_SIZE>() << std::endl;
 	std::cout << "  Max work item dimensions  : " << dev.getInfo<CL_DEVICE_MAX_WORK_ITEM_DIMENSIONS>() << std::endl;
-	//std::cout << "  Max work item sizes       : " << dev.getInfo<CL_DEVICE_MAX_WORK_ITEM_SIZES>() << std::endl;
+
+	std::vector<size_t> maxItemSizes = dev.getInfo<CL_DEVICE_MAX_WORK_ITEM_SIZES>();
+	for (size_t i = 0; i < maxItemSizes.size(); i++)
+	{
+		std::cout << "  Max work item sizes[" << i << "]    : " << maxItemSizes[i] << std::endl;
+	}
 	std::cout << "  Max write image args      : " << dev.getInfo<CL_DEVICE_MAX_WRITE_IMAGE_ARGS>() << std::endl;
 	std::cout << "  Name                      : " << dev.getInfo<CL_DEVICE_NAME>() << std::endl;
 	std::cout << "  Version                   : " << dev.getInfo<CL_DEVICE_VERSION>() << std::endl;
@@ -203,7 +208,7 @@ bool runKernel(size_t size, cl::Buffer& a, cl::Buffer& b, cl::Buffer& res)
 		
 		std::cout << "Starting kernel..." << std::endl;
 		
-		size_t local_ws = 512;
+		size_t local_ws = 256;
 		size_t global_ws = ((size + local_ws - 1) / local_ws) * local_ws;
 		cl::Event event;
 		queue.enqueueNDRangeKernel(
