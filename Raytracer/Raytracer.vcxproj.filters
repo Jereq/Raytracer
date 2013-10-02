@@ -32,5 +32,8 @@
     <None Include="vector_add_gpu.cl">
       <Filter>Kernel Files</Filter>
     </None>
+    <None Include="testImage.cl">
+      <Filter>Kernel Files</Filter>
+    </None>
   </ItemGroup>
 </Project>
