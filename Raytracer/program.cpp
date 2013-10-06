@@ -1,21 +1,12 @@
-#include <GL/glew.h>
-#include <GL/wglew.h>
+#include "GLWindow.h"
 
 #define __CL_ENABLE_EXCEPTIONS
 #define CL_GL_INTEROP
 #include <CL/cl.hpp>
 
-#include <GLFW/glfw3.h>
-
-#include <bitset>
 #include <fstream>
 #include <iostream>
 #include <vector>
-
-cl::Platform platform;
-cl::Context context;
-std::vector<cl::Device> devices;
-cl::CommandQueue queue;
 
 void printPlatformInfo(cl::Platform& plat)
 {
@@ -80,87 +71,75 @@ void printDeviceInfo(cl::Device& dev)
 	std::cout << "  Profiling timer resolution: " << dev.getInfo<CL_DEVICE_PROFILING_TIMER_RESOLUTION>() << std::endl;
 }
 
-bool initCL(bool printInfo)
+void initCL(cl::Context& _context, std::vector<cl::Device>& _devices, cl::CommandQueue& _queue, bool printInfo)
 {
 	cl_int err = CL_SUCCESS;
-	try
+
+	//std::cout << "Getting platforms..." << std::endl;
+
+	std::vector<cl::Platform> platforms;
+	cl::Platform::get(&platforms);
+	if (platforms.size() == 0)
 	{
-		//std::cout << "Getting platforms..." << std::endl;
+		throw std::exception("No OpenCL platform found.");
+	}
 
-		std::vector<cl::Platform> platforms;
-		cl::Platform::get(&platforms);
-		if (platforms.size() == 0)
+	unsigned int c = 0;
+	if (printInfo)
+	{
+		for (auto p : platforms)
 		{
-			std::cout << "Platform size 0" << std::endl;
-			return false;
+			std::cout << "Platform " << c++ << ":" << std::endl;
+			printPlatformInfo(p);
 		}
 
-		unsigned int c = 0;
-		if (printInfo)
-		{
-			for (auto p : platforms)
-			{
-				std::cout << "Platform " << c++ << ":" << std::endl;
-				printPlatformInfo(p);
-			}
+		std::cout << "Using platform 0" << std::endl;
+	}
 
-			std::cout << "Using platform 0" << std::endl;
-		}
-		platform = platforms[0];
+	//std::cout << "Creating context..." << std::endl;
 
-		//std::cout << "Creating context..." << std::endl;
+	HGLRC glCtx = wglGetCurrentContext();
 
-		HGLRC glCtx = wglGetCurrentContext();
+	cl_context_properties properties[] = {
+		CL_CONTEXT_PLATFORM, (cl_context_properties) platforms[0](),
+		CL_WGL_HDC_KHR, (cl_context_properties)wglGetCurrentDC(),
+		CL_GL_CONTEXT_KHR, (cl_context_properties)glCtx,
+		0
+	};
 
-		cl_context_properties properties[] = {
-			CL_CONTEXT_PLATFORM, (cl_context_properties) (platform)(),
-			CL_WGL_HDC_KHR, (cl_context_properties)wglGetCurrentDC(),
-			CL_GL_CONTEXT_KHR, (cl_context_properties)glCtx,
-			0
-		};
-
-		static clGetGLContextInfoKHR_fn clGetGLContextInfoKHR;
+	static clGetGLContextInfoKHR_fn clGetGLContextInfoKHR;
+	if (!clGetGLContextInfoKHR)
+	{
+		clGetGLContextInfoKHR = (clGetGLContextInfoKHR_fn) clGetExtensionFunctionAddressForPlatform(platforms[0](), "clGetGLContextInfoKHR");
 		if (!clGetGLContextInfoKHR)
 		{
-			clGetGLContextInfoKHR = (clGetGLContextInfoKHR_fn) clGetExtensionFunctionAddressForPlatform(platform(), "clGetGLContextInfoKHR");
-			if (!clGetGLContextInfoKHR)
-			{
-				std::cout << "Failed to query proc address for clGetGLContextInfoKHR" << std::endl;
-				return false;
-			}
+			throw std::exception("Failed to query proc address for clGetGLContextInfoKHR.");
 		}
-
-		cl_device_id interopDevice;
-		cl_int status = clGetGLContextInfoKHR(properties, CL_CURRENT_DEVICE_FOR_GL_CONTEXT_KHR, sizeof(cl_device_id), &interopDevice, nullptr);
-		cl::Device dev(interopDevice);
-
-		if (printInfo)
-		{
-			std::cout << "Device:" << std::endl;
-			printDeviceInfo(dev);
-		}
-
-		devices.push_back(dev);
-
-		context = cl::Context(devices, properties);
-
-		if (printInfo)
-		{
-			std::cout << "Context:" << std::endl;
-			printContextInfo(context);
-		}
-
-		//std::cout << "Creating queue..." << std::endl;
-
-		queue = cl::CommandQueue(context, dev, 0, &err);
 	}
-	catch (const cl::Error& err)
+
+	cl_device_id interopDevice;
+	cl_int status = clGetGLContextInfoKHR(properties, CL_CURRENT_DEVICE_FOR_GL_CONTEXT_KHR, sizeof(cl_device_id), &interopDevice, nullptr);
+	cl::Device dev(interopDevice);
+
+	if (printInfo)
 	{
-		std::cerr << "Error: " << err.what() << "(" << err.err() << ")" << std::endl;
-		return false;
+		std::cout << "Device:" << std::endl;
+		printDeviceInfo(dev);
 	}
 
-	return true;
+	_devices.push_back(dev);
+
+	_context = cl::Context(_devices, properties);
+
+	if (printInfo)
+	{
+		std::cout << "Context:" << std::endl;
+		printContextInfo(_context);
+	}
+
+	//std::cout << "Creating queue..." << std::endl;
+
+	_queue = cl::CommandQueue(_context, dev, 0, &err);
 }
 
 bool createBuffers(std::vector<float>& a, std::vector<float>& b, std::vector<float>& res, unsigned int size)
@@ -177,218 +156,109 @@ bool createBuffers(std::vector<float>& a, std::vector<float>& b, std::vector<flo
 	return true;
 }
 
-cl::Kernel kernel;
-
-bool compileKernel()
+cl::Kernel compileKernel(cl::Context& _context, std::vector<cl::Device>& _devices, const std::string& _filename, const std::string& _kernelName)
 {
 	cl_int err;
+
+	//std::cout << "Reading kernel file..." << std::endl;
+
+	std::string kernelString;
+	std::ifstream in(_filename, std::ios::in | std::ios::binary);
+	if (in)
+	{
+		in.seekg(0, std::ios::end);
+		kernelString.resize((unsigned int) in.tellg());
+		in.seekg(0, std::ios::beg);
+		in.read(&kernelString[0], kernelString.size());
+		in.close();
+	}
+	else
+	{
+		std::string errMsg("Error opening kernel file: ");
+		errMsg += strerror(errno);
+
+		throw std::exception(errMsg.c_str());
+	}
+
+	//std::cout << "Creating program..." << std::endl;
+
+	cl::Program::Sources source(1,
+		std::make_pair(kernelString.c_str(), kernelString.size()));
+	cl::Program program_ = cl::Program(_context, source);
+
+	//std::cout << "Building program..." << std::endl;
+
 	try
 	{
-		std::cout << "Reading kernel file..." << std::endl;
-
-		std::string kernelString;
-		std::ifstream in("testImage.cl", std::ios::in | std::ios::binary);
-		if (in)
-		{
-			in.seekg(0, std::ios::end);
-			kernelString.resize((unsigned int) in.tellg());
-			in.seekg(0, std::ios::beg);
-			in.read(&kernelString[0], kernelString.size());
-			in.close();
-		}
-		else
-		{
-			std::cout << "Error opening kernel file: " << strerror(errno) << std::endl;
-			return false;
-		}
-
-		std::cout << "Creating program..." << std::endl;
-
-		cl::Program::Sources source(1,
-			std::make_pair(kernelString.c_str(), kernelString.size()));
-		cl::Program program_ = cl::Program(context, source);
-
-		std::cout << "Building program..." << std::endl;
-
-		try
-		{
-			program_.build(devices, "-Werror");
-		}
-		catch (const cl::Error& err)
+		program_.build(_devices, "-Werror");
+	}
+	catch (const cl::Error&)
+	{
+		for (size_t i = 0; i < _devices.size(); i++)
 		{
 			std::string log;
-			program_.getBuildInfo(devices[0], CL_PROGRAM_BUILD_LOG, &log);
-			std::cout << "Build log:" << std::endl << log << std::endl;
-
-			throw err;
+			program_.getBuildInfo(_devices[i], CL_PROGRAM_BUILD_LOG, &log);
+			std::cout << "Build log[" << i << "]:" << std::endl << log << std::endl;
 		}
 
-		std::cout << "Creating kernel..." << std::endl;
-
-		kernel = cl::Kernel(program_, "testImage", &err);
-	}
-	catch (const cl::Error& err)
-	{
-		std::cerr << "Error: " << err.what() << "(" << err.err() << ")" << std::endl;
-		return false;
+		throw;
 	}
 
-	return true;
+	//std::cout << "Creating kernel..." << std::endl;
+
+	return cl::Kernel(program_, _kernelName.c_str(), &err);
 }
 
-bool runKernel(size_t size, cl::Buffer& a, cl::Buffer& b, cl::Buffer& res)
+void runKernel(cl::CommandQueue& _queue, cl::Kernel& _kernel, size_t size, cl::Buffer& a, cl::Buffer& b, cl::Buffer& res)
 {
-	try
-	{
-		//std::cout << "Setting kernel arguments..." << std::endl;
+	//std::cout << "Setting kernel arguments..." << std::endl;
 
-		kernel.setArg(0, a);
-		kernel.setArg(1, b);
-		kernel.setArg(2, res);
-		kernel.setArg(3, size);
+	_kernel.setArg(0, a);
+	_kernel.setArg(1, b);
+	_kernel.setArg(2, res);
+	_kernel.setArg(3, size);
 		
-		//std::cout << "Starting kernel..." << std::endl;
+	//std::cout << "Starting kernel..." << std::endl;
 		
-		size_t local_ws = 256;
-		size_t global_ws = ((size + local_ws - 1) / local_ws) * local_ws;
-		cl::Event event;
-		queue.enqueueNDRangeKernel(
-			kernel,
-			cl::NullRange,
-			cl::NDRange(global_ws),
-			cl::NDRange(local_ws),
-			nullptr,
-			&event);
+	size_t local_ws = 256;
+	size_t global_ws = ((size + local_ws - 1) / local_ws) * local_ws;
+	cl::Event event;
+	_queue.enqueueNDRangeKernel(
+		_kernel,
+		cl::NullRange,
+		cl::NDRange(global_ws),
+		cl::NDRange(local_ws),
+		nullptr,
+		&event);
 
-		//std::cout << "Waiting..." << std::endl;
+	//std::cout << "Waiting..." << std::endl;
 
-		event.wait();
-	}
-	catch (const cl::Error& err)
-	{
-		std::cerr << "Error: " << err.what() << "(" << err.err() << ")" << std::endl;
-		return false;
-	}
-
-	return true;
+	event.wait();
 }
 
-bool runImageKernel(cl::ImageGL& image, int width, int height)
+void runImageKernel(cl::CommandQueue& _queue, cl::Kernel& _kernel, cl::ImageGL& _image, int _width, int _height)
 {
-	try
-	{
-		//std::cout << "Setting kernel arguments..." << std::endl;
-		
-		kernel.setArg(0, image);
-		
-		//std::cout << "Starting kernel..." << std::endl;
-		
-		size_t local_ws = 16;
-		size_t global_wsx = ((width + local_ws - 1) / local_ws) * local_ws;
-		size_t global_wsy = ((height + local_ws - 1) / local_ws) * local_ws;
-		cl::Event event;
-		queue.enqueueNDRangeKernel(
-			kernel,
-			cl::NullRange,
-			cl::NDRange(global_wsx, global_wsy),
-			cl::NDRange(local_ws, local_ws),
-			nullptr,
-			&event);
+	//std::cout << "Setting kernel arguments..." << std::endl;
 
-		//std::cout << "Waiting..." << std::endl;
+	_kernel.setArg(0, _image);
 
-		event.wait();
-	}
-	catch (const cl::Error& err)
-	{
-		std::cerr << "Error: " << err.what() << "(" << err.err() << ")" << std::endl;
-		return false;
-	}
+	//std::cout << "Starting kernel..." << std::endl;
 
-	return true;
-}
+	size_t local_ws = 16;
+	size_t global_wsx = ((_width + local_ws - 1) / local_ws) * local_ws;
+	size_t global_wsy = ((_height + local_ws - 1) / local_ws) * local_ws;
+	cl::Event event;
+	_queue.enqueueNDRangeKernel(
+		_kernel,
+		cl::NullRange,
+		cl::NDRange(global_wsx, global_wsy),
+		cl::NDRange(local_ws, local_ws),
+		nullptr,
+		&event);
 
-GLFWwindow* window;
-int windowWidth;
-int windowHeight;
+	//std::cout << "Waiting..." << std::endl;
 
-bool initOpenGL(int _windowWidth, int _windowHeight)
-{
-	windowWidth = _windowWidth;
-	windowHeight = _windowHeight;
-
-	if (!glfwInit())
-	{
-		std::cout << "Failed to initialize GLFW." << std::endl;
-		return false;
-	}
-
-	window = glfwCreateWindow(windowWidth, windowHeight, "Hello World", nullptr, nullptr);
-	if (!window)
-	{
-		glfwTerminate();
-
-		std::cout << "Failed to create window." << std::endl;
-		return false;
-	}
-
-	glfwMakeContextCurrent(window);
-
-	glewExperimental = GL_TRUE;
-	GLenum err = glewInit();
-	if (err)
-	{
-		std::cout << "Failed to initialize GLEW(" << err << ")." << std::endl;
-		return false;
-	}
-
-	return true;
-}
-
-void destroyOpenGL()
-{
-	glfwTerminate();
-}
-
-GLuint framebuffer;
-GLuint framebufferTexture;
-GLuint framebufferWidth;
-GLuint framebufferHeight;
-
-bool createFramebuffer(GLuint _framebufferWidth, GLuint _framebufferHeight)
-{
-	framebufferWidth = _framebufferWidth;
-	framebufferHeight = _framebufferHeight;
-
-	glGenFramebuffers(1, &framebuffer);
-	glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
-
-	glGenTextures(1, &framebufferTexture);
-	glBindTexture(GL_TEXTURE_2D, framebufferTexture);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, framebufferWidth, framebufferHeight, 0, GL_RGBA, GL_FLOAT, nullptr);
-	
-	glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, framebufferTexture, 0);
-
-	glBindTexture(GL_TEXTURE_2D, 0);
-	glBindFramebuffer(GL_FRAMEBUFFER, 0);
-
-	return true;
-}
-
-void destroyFramebuffer()
-{
-	glDeleteFramebuffers(1, &framebuffer);
-	glDeleteTextures(1, &framebufferTexture);
-}
-
-void blitFramebuffer()
-{
-	glBindFramebuffer(GL_READ_FRAMEBUFFER, framebuffer);
-	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
-	
-	glBlitFramebuffer(0, 0, framebufferWidth, framebufferHeight, 0, 0, windowWidth, windowHeight, GL_COLOR_BUFFER_BIT, GL_LINEAR);
-
-	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+	event.wait();
 }
 
 int main(int argc, char** argv)
@@ -396,80 +266,53 @@ int main(int argc, char** argv)
 	const static int width = 640;
 	const static int height = 480;
 
-	if (!initOpenGL(width, height))
-	{
-		system("pause");
-		return EXIT_FAILURE;
-	}
-
-	if (!initCL(false))
-	{
-		destroyOpenGL();
-		system("pause");
-		return EXIT_FAILURE;
-	}
-
-	createFramebuffer(width, height);
-	
-	if (!compileKernel())
-	{
-		destroyFramebuffer();
-		destroyOpenGL();
-		system("pause");
-		return EXIT_FAILURE;
-	}
-
-	cl::ImageGL clImage;
 	try
 	{
-		clImage = cl::ImageGL(context, CL_MEM_READ_WRITE, GL_TEXTURE_2D, 0, framebufferTexture);
+		GLWindow window("Raytracing madness", width, height);
+
+		cl::Context context;
+		std::vector<cl::Device> devices;
+		cl::CommandQueue queue;
+		initCL(context, devices, queue, false);
+
+		window.createFramebuffer(width, height);
+
+		cl::Kernel kernel = compileKernel(context, devices, "testImage.cl", "testImage");
+
+		cl::ImageGL clImage = cl::ImageGL(context, CL_MEM_READ_WRITE, GL_TEXTURE_2D, 0, window.getFramebufferTexture());
+		int imageWidth = window.getFramebufferWidth();
+		int imageHeight = window.getFramebufferHeight();
+
+		std::vector<cl::Memory> glObjects;
+		glObjects.push_back(clImage);
+
+		while (!window.shouldClose())
+		{
+			window.clearFramebuffer(1.f, 0.f, 0.f);
+			glFinish();
+			queue.enqueueAcquireGLObjects(&glObjects);
+
+			// Render
+			runImageKernel(queue, kernel, clImage, imageWidth, imageHeight);
+
+			queue.enqueueReleaseGLObjects(&glObjects);
+			queue.finish();
+
+			window.drawFramebuffer();
+		}
 	}
-	catch (cl::Error& err)
+	catch (const cl::Error& err)
 	{
-		std::cerr << "Error: " << err.what() << "(" << err.err() << ")" << std::endl;
-
-		destroyFramebuffer();
-		destroyOpenGL();
-
+		std::cerr << "Error: (" << err.err() << ") " << err.what() << std::endl;
 		system("pause");
 		return EXIT_FAILURE;
 	}
-
-	std::vector<cl::Memory> glObjects;
-	glObjects.push_back(clImage);
-
-	while (!glfwWindowShouldClose(window))
+	catch (const std::exception& ex)
 	{
-		glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
-		glClearColor(1.f, 0.f, 0.f, 1.f);
-		glClear(GL_COLOR_BUFFER_BIT);
-		glFinish();
-		queue.enqueueAcquireGLObjects(&glObjects);
-		if (!runImageKernel(clImage, framebufferWidth, framebufferHeight))
-		{
-			std::cout << "Failed to run kernel." << std::endl;
-			system("pause");
-			break;
-		}
-		queue.enqueueReleaseGLObjects(&glObjects);
-		queue.finish();
-
-		glfwGetFramebufferSize(window, &windowWidth, &windowHeight);
-
-		glBindFramebuffer(GL_FRAMEBUFFER, 0);
-
-		// Render
-
-		glClearColor(1.f, 0.f, 1.f, 1.f);
-		glClear(GL_COLOR_BUFFER_BIT);
-		blitFramebuffer();
-
-		glfwSwapBuffers(window);
-		glfwPollEvents();
+		std::cerr << "Error: " << ex.what() << std::endl;
+		system("pause");
+		return EXIT_FAILURE;
 	}
-
-	destroyFramebuffer();
-	destroyOpenGL();
 
 	return EXIT_SUCCESS;
 }

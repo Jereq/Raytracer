@@ -75,10 +75,12 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="GLWindow.cpp" />
     <ClCompile Include="program.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="cl.hpp" />
+    <ClInclude Include="GLWindow.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="testImage.cl" />
