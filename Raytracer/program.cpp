@@ -368,7 +368,7 @@ int main(int argc, char** argv)
 		std::vector<cl::Memory> glObjects;
 		glObjects.push_back(clImage);
 
-		Camera camera(90.f, (float)width / (float)height);
+		Camera camera(45.f, (float)width / (float)height);
 		camera.setViewDirection(glm::vec3(0.f, 0.f, -1.f));
 		camera.setPosition(glm::vec3(0.f, 0.f, 0.f));
 

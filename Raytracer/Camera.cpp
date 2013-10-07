@@ -96,9 +96,9 @@ void Camera::setUpDirection(const glm::vec3& _upDirection)
 
 void Camera::setRotation(const glm::vec3& _rot)
 {
-	glm::mat4 rotMat = glm::rotate(glm::mat4(), _rot.z, glm::vec3(0.f, 0.f, 1.f));
+	glm::mat4 rotMat = glm::rotate(glm::mat4(), _rot.y, glm::vec3(0.f, 1.f, 0.f));
 	rotMat = glm::rotate(rotMat, _rot.x, glm::vec3(1.f, 0.f, 0.f));
-	rotMat = glm::rotate(rotMat, _rot.y, glm::vec3(0.f, 1.f, 0.f));
+	rotMat = glm::rotate(rotMat, _rot.z, glm::vec3(0.f, 0.f, 1.f));
 
 	setViewDirection(glm::vec3(rotMat * glm::vec4(0.f, 0.f, -1.f, 0.f)));
 	setUpDirection(glm::vec3(rotMat * glm::vec4(0.f, 1.f, 0.f, 0.f)));
