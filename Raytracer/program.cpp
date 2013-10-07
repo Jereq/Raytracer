@@ -1,8 +1,12 @@
+#include "Camera.h"
 #include "GLWindow.h"
 
 #define __CL_ENABLE_EXCEPTIONS
 #define CL_GL_INTEROP
 #include <CL/cl.hpp>
+
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 
 #include <fstream>
 #include <iostream>
@@ -156,12 +160,8 @@ bool createBuffers(std::vector<float>& a, std::vector<float>& b, std::vector<flo
 	return true;
 }
 
-cl::Kernel compileKernel(cl::Context& _context, std::vector<cl::Device>& _devices, const std::string& _filename, const std::string& _kernelName)
+cl::Program createProgramFromFile(cl::Context& _context, std::vector<cl::Device>& _devices, const std::string& _filename)
 {
-	cl_int err;
-
-	//std::cout << "Reading kernel file..." << std::endl;
-
 	std::string kernelString;
 	std::ifstream in(_filename, std::ios::in | std::ios::binary);
 	if (in)
@@ -180,33 +180,38 @@ cl::Kernel compileKernel(cl::Context& _context, std::vector<cl::Device>& _device
 		throw std::exception(errMsg.c_str());
 	}
 
-	//std::cout << "Creating program..." << std::endl;
-
 	cl::Program::Sources source(1,
 		std::make_pair(kernelString.c_str(), kernelString.size()));
-	cl::Program program_ = cl::Program(_context, source);
+	cl::Program program = cl::Program(_context, source);
 
 	//std::cout << "Building program..." << std::endl;
 
 	try
 	{
-		program_.build(_devices, "-Werror");
+		program.build(_devices, "-Werror");
 	}
 	catch (const cl::Error&)
 	{
 		for (size_t i = 0; i < _devices.size(); i++)
 		{
 			std::string log;
-			program_.getBuildInfo(_devices[i], CL_PROGRAM_BUILD_LOG, &log);
+			program.getBuildInfo(_devices[i], CL_PROGRAM_BUILD_LOG, &log);
 			std::cout << "Build log[" << i << "]:" << std::endl << log << std::endl;
 		}
 
 		throw;
 	}
 
+	return program;
+}
+
+cl::Kernel compileKernel(cl::Context& _context, std::vector<cl::Device>& _devices, const std::string& _filename, const std::string& _kernelName)
+{
+	cl::Program program = createProgramFromFile(_context, _devices, _filename);
+
 	//std::cout << "Creating kernel..." << std::endl;
 
-	return cl::Kernel(program_, _kernelName.c_str(), &err);
+	return cl::Kernel(program, _kernelName.c_str());
 }
 
 void runKernel(cl::CommandQueue& _queue, cl::Kernel& _kernel, size_t size, cl::Buffer& a, cl::Buffer& b, cl::Buffer& res)
@@ -236,11 +241,12 @@ void runKernel(cl::CommandQueue& _queue, cl::Kernel& _kernel, size_t size, cl::B
 	event.wait();
 }
 
-void runImageKernel(cl::CommandQueue& _queue, cl::Kernel& _kernel, cl::ImageGL& _image, int _width, int _height)
+void runImageKernel(cl::CommandQueue& _queue, cl::Kernel& _kernel, cl::ImageGL& _image, cl::Buffer& _rays, int _width, int _height)
 {
 	//std::cout << "Setting kernel arguments..." << std::endl;
 
 	_kernel.setArg(0, _image);
+	_kernel.setArg(1, _rays);
 
 	//std::cout << "Starting kernel..." << std::endl;
 
@@ -261,6 +267,22 @@ void runImageKernel(cl::CommandQueue& _queue, cl::Kernel& _kernel, cl::ImageGL& 
 	event.wait();
 }
 
+std::ostream& operator<<(std::ostream& _in, const glm::vec4& _vec)
+{
+	return _in << "(" << _vec.x << ", " << _vec.y << ", " << _vec.z << ", " << _vec.w << ")";
+}
+
+int toMultiple(int _val, int _mul)
+{
+	return ((_val + _mul - 1) / _mul) * _mul;
+}
+
+struct ray
+{
+	glm::vec4 position;
+	glm::vec4 direction;
+};
+
 int main(int argc, char** argv)
 {
 	const static int width = 640;
@@ -273,11 +295,13 @@ int main(int argc, char** argv)
 		cl::Context context;
 		std::vector<cl::Device> devices;
 		cl::CommandQueue queue;
-		initCL(context, devices, queue, false);
+		initCL(context, devices, queue, true);
 
 		window.createFramebuffer(width, height);
 
 		cl::Kernel kernel = compileKernel(context, devices, "testImage.cl", "testImage");
+		cl::Program rayProgram = createProgramFromFile(context, devices, "rayTracing.cl");
+		cl::Kernel primaryRaysKernel(rayProgram, "primaryRays");
 
 		cl::ImageGL clImage = cl::ImageGL(context, CL_MEM_READ_WRITE, GL_TEXTURE_2D, 0, window.getFramebufferTexture());
 		int imageWidth = window.getFramebufferWidth();
@@ -286,6 +310,54 @@ int main(int argc, char** argv)
 		std::vector<cl::Memory> glObjects;
 		glObjects.push_back(clImage);
 
+		Camera camera(90.f, (float)width / (float)height);
+		camera.setViewDirection(glm::vec3(0.f, 0.f, -1.f));
+		camera.setPosition(glm::vec3(0.f, 0.f, 0.f));
+
+		std::vector<ray> primaryRays(width * height);
+		cl::Buffer primaryRaysBuffer(context, CL_MEM_READ_WRITE, primaryRays.size() * sizeof(ray));
+
+		primaryRaysKernel.setArg(0, primaryRaysBuffer);
+		primaryRaysKernel.setArg(1, glm::transpose(camera.getInvViewProjectionMatrix()));
+		primaryRaysKernel.setArg(2, glm::vec4(camera.getPosition(), 1.f));
+		primaryRaysKernel.setArg(3, width);
+		primaryRaysKernel.setArg(4, height);
+
+		cl::NDRange local(32, 8);
+		cl::NDRange global(toMultiple(width, local[0]), toMultiple(height, local[1]));
+		cl::Event tEv;
+		queue.enqueueNDRangeKernel(primaryRaysKernel, cl::NullRange, global, local, nullptr, &tEv);
+		tEv.wait();
+		queue.enqueueReadBuffer(primaryRaysBuffer, true, 0, width * height * sizeof(ray), primaryRays.data());
+		
+		int dummy = 42;
+
+		/*glm::vec4 tests[] = {
+			glm::vec4(0.f, 0.f, -0.01f, 1.f),
+			glm::vec4(0.f, 0.f, 1.f, 1.f),
+			glm::vec4(0.f, 0.f, -1.f, 1.f),
+			glm::vec4(1.f, 0.f, 0.f, 1.f),
+			glm::vec4(-1.f, 0.f, 0.f, 1.f),
+			glm::vec4(0.f, 1.f, 0.f, 1.f),
+			glm::vec4(0.f, 0.f, 0.f, 1.f)
+		};
+
+		glm::mat4 m = camera.getViewProjectionMatrix();
+		glm::mat4 invM = camera.getInvViewProjectionMatrix();
+
+		for (auto v : tests)
+		{
+			glm::vec4 mVec = m * v;
+			if (mVec.w != 0.f)
+			{
+				mVec *= 1.f / mVec.w;
+			}
+
+			std::cout << "m    * " << v << " => " << mVec << std::endl;
+			glm::vec4 nVec = invM * v;
+			std::cout << "invM * " << v << " => " << nVec / nVec.w << std::endl;
+		}*/
+
 		while (!window.shouldClose())
 		{
 			window.clearFramebuffer(1.f, 0.f, 0.f);
@@ -293,7 +365,7 @@ int main(int argc, char** argv)
 			queue.enqueueAcquireGLObjects(&glObjects);
 
 			// Render
-			runImageKernel(queue, kernel, clImage, imageWidth, imageHeight);
+			runImageKernel(queue, kernel, clImage, primaryRaysBuffer, imageWidth, imageHeight);
 
 			queue.enqueueReleaseGLObjects(&glObjects);
 			queue.finish();

@@ -39,11 +39,11 @@
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
-    <IncludePath>$(AMDAPPSDKROOT)/include;$(CUDA_PATH)/include;$(ProgramFiles)/GLEW/include;$(ProgramFiles)/GLFW/include;$(IncludePath)</IncludePath>
+    <IncludePath>$(AMDAPPSDKROOT)/include;$(CUDA_PATH)/include;$(ProgramFiles)/GLEW/include;$(ProgramFiles)/GLFW/include;C:\glm;$(IncludePath)</IncludePath>
     <LibraryPath>$(ProgramFiles)/GLEW/lib/Release MX/$(Platform)/;$(ProgramFiles)/GLEW/lib/Release/$(Platform)/;$(ProgramFiles)/GLFW/lib;$(AMDAPPSDKROOT)/lib/x86;$(CUDA_PATH)/lib/Win32;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
-    <IncludePath>$(AMDAPPSDKROOT)/include;$(CUDA_PATH)/include;$(ProgramFiles)/GLEW/include;$(ProgramFiles)/GLFW/include;$(IncludePath)</IncludePath>
+    <IncludePath>$(AMDAPPSDKROOT)/include;$(CUDA_PATH)/include;$(ProgramFiles)/GLEW/include;$(ProgramFiles)/GLFW/include;C:\glm;$(IncludePath)</IncludePath>
     <LibraryPath>$(ProgramFiles)/GLEW/lib/Release MX/$(Platform)/;$(ProgramFiles)/GLEW/lib/Release/$(Platform)/;$(ProgramFiles)/GLFW/lib;$(AMDAPPSDKROOT)/lib/x86;$(CUDA_PATH)/lib/Win32;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
@@ -75,14 +75,17 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="Camera.cpp" />
     <ClCompile Include="GLWindow.cpp" />
     <ClCompile Include="program.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="Camera.h" />
     <ClInclude Include="cl.hpp" />
     <ClInclude Include="GLWindow.h" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="rayTracing.cl" />
     <None Include="testImage.cl" />
     <None Include="vector_add_gpu.cl" />
   </ItemGroup>
