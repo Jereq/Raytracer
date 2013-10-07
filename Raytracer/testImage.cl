@@ -19,23 +19,22 @@ __kernel void testImage(__write_only image2d_t image, __global Ray* _rays)
 
 	float4 rDistance = sphere.position - r.position;
 	float rayDist = dot(r.direction, rDistance);
-	if (rayDist < 0.f)
+	if (rayDist < -sphere.radius)
 	{
 		return;
 	}
+
 	float4 sDistance = rDistance - rayDist * r.direction;
 	float centerDistance2 = dot(sDistance, sDistance);
 
-	float4 color;
-
-	if (centerDistance2 < sphere.radius * sphere.radius)
-	{
-		color = (float4)(1.f, 1.f, 1.f, 1.f);
-	}
-	else
+	if (centerDistance2 > sphere.radius * sphere.radius)
 	{
 		return;
 	}
-	
+
+	float k2 = sqrt(sphere.radius * sphere.radius - centerDistance2);
+	float4 n = normalize(-sDistance - k2 * r.direction);
+
+	float4 color = (float4)(n.x, n.y, n.z, 1.f);
 	write_imagef(image, pos, color);
 }
