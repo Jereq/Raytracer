@@ -35,5 +35,8 @@ public:
 	GLuint getFramebufferWidth() const;
 	GLuint getFramebufferHeight() const;
 
+	void setKeyCallback(GLFWkeyfun _func);
+	void setMouseCallback(GLFWcursorposfun _func);
+
 	bool shouldClose() const;
 };

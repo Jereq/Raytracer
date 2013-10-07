@@ -135,6 +135,16 @@ GLuint GLWindow::getFramebufferHeight() const
 	return framebufferHeight;
 }
 
+void GLWindow::setKeyCallback(GLFWkeyfun _func)
+{
+	glfwSetKeyCallback(window, _func);
+}
+
+void GLWindow::setMouseCallback(GLFWcursorposfun _func)
+{
+	glfwSetCursorPosCallback(window, _func);
+}
+
 bool GLWindow::shouldClose() const
 {
 	return glfwWindowShouldClose(window) || (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS);

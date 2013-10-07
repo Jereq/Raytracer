@@ -283,14 +283,72 @@ struct ray
 	glm::vec4 direction;
 };
 
+glm::vec2 dir;
+double prevXPos, prevYPos;
+glm::vec2 rotation;
+
+void keyCallback(GLFWwindow* _window, int _key, int _scanCode, int _action, int _mod)
+{
+	float forward;
+	if (_action == GLFW_PRESS)
+		forward = 1.f;
+	else if (_action == GLFW_RELEASE)
+		forward = -1.f;
+	else
+		return;
+
+	switch (_key)
+	{
+	case GLFW_KEY_A:
+		dir.x -= forward;
+		break;
+
+	case GLFW_KEY_D:
+		dir.x += forward;
+		break;
+
+	case GLFW_KEY_W:
+		dir.y -= forward;
+		break;
+
+	case GLFW_KEY_S:
+		dir.y += forward;
+		break;
+	}
+}
+
+void cursorPosCallback(GLFWwindow* _window, double _xPos, double _yPos)
+{
+	double deltaX = _xPos - prevXPos;
+	double deltaY = _yPos - prevYPos;
+	prevXPos = _xPos;
+	prevYPos = _yPos;
+
+	const static float rotationSpeed = 1.f;
+	rotation.x += rotationSpeed * deltaX;
+	rotation.y += rotationSpeed * -deltaY;
+	if(rotation.x > 180.f)
+		rotation.x -= 360.f;
+	if(rotation.x < -180.f)
+		rotation.x += 360.f;
+
+	if (rotation.y > 90.f)
+		rotation.y = 90.f;
+	if (rotation.y < -90.f)
+		rotation.y = -90.f;
+}
+
 int main(int argc, char** argv)
 {
 	const static int width = 640;
 	const static int height = 480;
+	const static float speed = 2.f;
 
 	try
 	{
 		GLWindow window("Raytracing madness", width, height);
+		window.setKeyCallback(&keyCallback);
+		window.setMouseCallback(&cursorPosCallback);
 
 		cl::Context context;
 		std::vector<cl::Device> devices;
@@ -325,9 +383,6 @@ int main(int argc, char** argv)
 
 		cl::NDRange local(32, 8);
 		cl::NDRange global(toMultiple(width, local[0]), toMultiple(height, local[1]));
-		cl::Event tEv;
-		queue.enqueueNDRangeKernel(primaryRaysKernel, cl::NullRange, global, local, nullptr, &tEv);
-		tEv.wait();
 		queue.enqueueReadBuffer(primaryRaysBuffer, true, 0, width * height * sizeof(ray), primaryRays.data());
 		
 		int dummy = 42;
@@ -360,8 +415,25 @@ int main(int argc, char** argv)
 
 		while (!window.shouldClose())
 		{
+			float deltaTime = 0.001f;
+			if (dir != glm::vec2(0.f))
+			{
+				glm::vec2 velocity = glm::normalize(dir) * speed * deltaTime;
+				glm::mat4 rotY = glm::rotate(glm::mat4(), -rotation.x, glm::vec3(0.f, 1.f, 0.f));
+				camera.setPosition(camera.getPosition() + glm::vec3(rotY * glm::vec4(velocity.x, 0.f, velocity.y, 0.f)));
+			}
+			camera.setRotation(glm::vec3(rotation.y, -rotation.x, 0.f));
+
 			window.clearFramebuffer(1.f, 0.f, 0.f);
 			glFinish();
+
+			primaryRaysKernel.setArg(1, glm::transpose(camera.getInvViewProjectionMatrix()));
+			primaryRaysKernel.setArg(2, glm::vec4(camera.getPosition(), 1.f));
+
+			cl::Event tEv;
+			queue.enqueueNDRangeKernel(primaryRaysKernel, cl::NullRange, global, local, nullptr, &tEv);
+			tEv.wait();
+
 			queue.enqueueAcquireGLObjects(&glObjects);
 
 			// Render
