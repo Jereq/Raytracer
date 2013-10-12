@@ -147,7 +147,7 @@ void initCL(cl::Context& _context, std::vector<cl::Device>& _devices, cl::Comman
 
 	//std::cout << "Creating queue..." << std::endl;
 
-	_queue = cl::CommandQueue(_context, dev, 0, &err);
+	_queue = cl::CommandQueue(_context, dev, CL_QUEUE_PROFILING_ENABLE, &err);
 }
 
 bool createBuffers(std::vector<float>& a, std::vector<float>& b, std::vector<float>& res, unsigned int size)
@@ -350,13 +350,85 @@ void cursorPosCallback(GLFWwindow* _window, double _xPos, double _yPos)
 		rotation.y = -90.f;
 }
 
+cl_ulong getExecutionTime(cl::Event& _event)
+{
+	cl_ulong start = _event.getProfilingInfo<CL_PROFILING_COMMAND_START>();
+	cl_ulong end = _event.getProfilingInfo<CL_PROFILING_COMMAND_END>();
+	return end - start;
+}
+
+double toSeconds(cl_ulong _nanoSeconds)
+{
+	return _nanoSeconds / 1000000000.0; // Nanoseconds to seconds
+}
+
+void glErr()
+{
+	GLenum res = glGetError();
+	while (res)
+	{
+		res = glGetError();
+	}
+}
+
+std::vector<std::pair<std::string, uint64_t>> timers;
+unsigned int widestName = 0;
+std::chrono::high_resolution_clock::time_point prevTimingPoint;
+
+void initTimer()
+{
+	prevTimingPoint = std::chrono::high_resolution_clock::now();
+}
+
+void registerTimer(const std::string& _name, uint64_t _initVal = 0ui64)
+{
+	if (_name.size() > widestName)
+		widestName = _name.size();
+
+	timers.push_back(std::make_pair(_name, 0));
+}
+
+void incTime(const std::string& _name, uint64_t _nanoSeconds)
+{
+	for (auto& val : timers)
+	{
+		if (val.first == _name)
+		{
+			val.second += _nanoSeconds;
+			return;
+		}
+	}
+
+	registerTimer(_name, _nanoSeconds);
+}
+
+void printTimersAndReset()
+{
+	auto currentTime = std::chrono::high_resolution_clock::now();
+	auto deltaTime = currentTime - prevTimingPoint;
+	prevTimingPoint = currentTime;
+
+	double d_deltaTime = std::chrono::duration<double>(deltaTime).count();
+
+	for (auto& val : timers)
+	{
+		std::cout << std::left << std::setw(widestName) << val.first << ": " << std::right << std::setw(5) << toSeconds(val.second) * 100.0 / d_deltaTime << "%" << std::endl;
+		val.second = 0;
+	}
+}
+
 int main(int argc, char** argv)
 {
 	const static int width = 1024;
 	const static int height = 768;
 	const static float speed = 2.f;
 
+	const static int NUM_SPHERES = 100;
+
 	const static std::string WINDOW_TITLE("Raytracing madness");
+
+	const static std::chrono::system_clock::duration MEASURE_TIME(std::chrono::seconds(5));
+	const static double MEASURE_TIME_D = std::chrono::duration_cast<std::chrono::duration<double>>(MEASURE_TIME).count();
 
 	try
 	{
@@ -388,7 +460,6 @@ int main(int argc, char** argv)
 		camera.setPosition(glm::vec3(0.f, 0.f, 0.f));
 
 		int numRays = width * height;
-		//std::vector<Ray> primaryRays(numRays);
 		cl::Buffer primaryRaysBuffer(context, CL_MEM_READ_WRITE, numRays * sizeof(Ray));
 
 		primaryRaysKernel.setArg(0, primaryRaysBuffer);
@@ -397,7 +468,6 @@ int main(int argc, char** argv)
 		primaryRaysKernel.setArg(3, width);
 		primaryRaysKernel.setArg(4, height);
 
-		const static int NUM_SPHERES = 50;
 		std::vector<Sphere> spheres(NUM_SPHERES);
 		for (Sphere& s : spheres)
 		{
@@ -415,7 +485,6 @@ int main(int argc, char** argv)
 
 		cl::NDRange local(32, 8);
 		cl::NDRange global(toMultiple(width, local[0]), toMultiple(height, local[1]));
-		//queue.enqueueReadBuffer(primaryRaysBuffer, true, 0, width * height * sizeof(Ray), primaryRays.data());
 
 		typedef std::chrono::duration<double> dSec;
 
@@ -431,11 +500,14 @@ int main(int argc, char** argv)
 			prevTime = currentTime;
 			currentTime = std::chrono::high_resolution_clock::now();
 
-			if (std::chrono::duration_cast<std::chrono::seconds>(currentTime - prevPrint).count() > 0)
+			if (currentTime - prevPrint > MEASURE_TIME)
 			{
-				prevPrint += std::chrono::seconds(1);
-				window.setTitle(WINDOW_TITLE + " | FPS: " + std::to_string(frames));
-				std::cout << "FPS: " << frames << ", Average frame time: " << std::fixed << std::setprecision(2) << 1000.0 / frames << " ms" << std::endl;
+				prevPrint += MEASURE_TIME;
+				window.setTitle(WINDOW_TITLE + " | FPS: " + std::to_string((int)(frames / MEASURE_TIME_D)));
+				std::cout << "FPS: " << std::fixed << std::setprecision(1) << frames / MEASURE_TIME_D << ", " << std::setprecision(2) << 1000.0 * MEASURE_TIME_D / frames << " ms/F" << std::endl;
+				printTimersAndReset();
+				std::cout << std::endl;
+
 				frames = 0;
 			}
 
@@ -451,6 +523,8 @@ int main(int argc, char** argv)
 			window.clearFramebuffer(1.f, 0.f, 0.f);
 			glFinish();
 
+			auto startCL = std::chrono::high_resolution_clock::now();
+
 			primaryRaysKernel.setArg(1, glm::transpose(camera.getInvViewProjectionMatrix()));
 			primaryRaysKernel.setArg(2, glm::vec4(camera.getPosition(), 1.f));
 
@@ -465,17 +539,37 @@ int main(int argc, char** argv)
 
 			events.push_back(interEvent);
 
-			queue.enqueueAcquireGLObjects(&glObjects);
+			cl::Event aqEvent;
+			queue.enqueueAcquireGLObjects(&glObjects, &events, &aqEvent);
+
+			events.push_back(aqEvent);
 
 			// Render
 			cl::Event imageEvent;
 			runImageKernel(queue, kernel, clImage, primaryRaysBuffer, imageWidth, imageHeight, &events, &imageEvent);
-			imageEvent.wait();
 
-			queue.enqueueReleaseGLObjects(&glObjects);
+			events.push_back(imageEvent);
+
+			cl::Event relEvent;
+			queue.enqueueReleaseGLObjects(&glObjects, &events, &relEvent);
+
+			auto endCL = std::chrono::high_resolution_clock::now();
+
 			queue.finish();
 
+			auto drawStart = std::chrono::high_resolution_clock::now();
 			window.drawFramebuffer();
+			auto drawEnd = std::chrono::high_resolution_clock::now();
+
+			incTime("Primary rays", getExecutionTime(primEvent));
+			incTime("Intersection Spheres", getExecutionTime(interEvent));
+			incTime("Shading pass", getExecutionTime(imageEvent));
+			incTime("Aquire objects", getExecutionTime(aqEvent));
+			incTime("Release objects", getExecutionTime(relEvent));
+
+			incTime("Total OpenCL", std::chrono::duration_cast<std::chrono::nanoseconds>(drawStart - startCL).count());
+			incTime("OpenCL enqueue work", std::chrono::duration_cast<std::chrono::nanoseconds>(endCL - startCL).count());
+			incTime("OpenGL blit and swap", std::chrono::duration_cast<std::chrono::nanoseconds>(drawEnd - drawStart).count());
 		}
 	}
 	catch (const cl::Error& err)
