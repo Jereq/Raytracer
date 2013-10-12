@@ -145,6 +145,11 @@ void GLWindow::setMouseCallback(GLFWcursorposfun _func)
 	glfwSetCursorPosCallback(window, _func);
 }
 
+void GLWindow::setTitle(const std::string& _title)
+{
+	glfwSetWindowTitle(window, _title.c_str());
+}
+
 bool GLWindow::shouldClose() const
 {
 	return glfwWindowShouldClose(window) || (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS);

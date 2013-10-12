@@ -38,5 +38,7 @@ public:
 	void setKeyCallback(GLFWkeyfun _func);
 	void setMouseCallback(GLFWcursorposfun _func);
 
+	void setTitle(const std::string& _title);
+
 	bool shouldClose() const;
 };

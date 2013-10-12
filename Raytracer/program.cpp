@@ -7,9 +7,13 @@
 
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/random.hpp>
 
+#include <chrono>
 #include <fstream>
+#include <iomanip>
 #include <iostream>
+#include <thread>
 #include <vector>
 
 void printPlatformInfo(cl::Platform& plat)
@@ -241,7 +245,7 @@ void runKernel(cl::CommandQueue& _queue, cl::Kernel& _kernel, size_t size, cl::B
 	event.wait();
 }
 
-void runImageKernel(cl::CommandQueue& _queue, cl::Kernel& _kernel, cl::ImageGL& _image, cl::Buffer& _rays, int _width, int _height)
+void runImageKernel(cl::CommandQueue& _queue, cl::Kernel& _kernel, cl::ImageGL& _image, cl::Buffer& _rays, int _width, int _height, std::vector<cl::Event>* _events, cl::Event* _outEvent)
 {
 	//std::cout << "Setting kernel arguments..." << std::endl;
 
@@ -253,18 +257,14 @@ void runImageKernel(cl::CommandQueue& _queue, cl::Kernel& _kernel, cl::ImageGL& 
 	size_t local_ws = 16;
 	size_t global_wsx = ((_width + local_ws - 1) / local_ws) * local_ws;
 	size_t global_wsy = ((_height + local_ws - 1) / local_ws) * local_ws;
-	cl::Event event;
+
 	_queue.enqueueNDRangeKernel(
 		_kernel,
 		cl::NullRange,
 		cl::NDRange(global_wsx, global_wsy),
 		cl::NDRange(local_ws, local_ws),
-		nullptr,
-		&event);
-
-	//std::cout << "Waiting..." << std::endl;
-
-	event.wait();
+		_events,
+		_outEvent);
 }
 
 std::ostream& operator<<(std::ostream& _in, const glm::vec4& _vec)
@@ -277,10 +277,22 @@ int toMultiple(int _val, int _mul)
 	return ((_val + _mul - 1) / _mul) * _mul;
 }
 
-struct ray
+struct Ray
 {
 	glm::vec4 position;
 	glm::vec4 direction;
+	glm::vec4 diffuseReflectivity;
+	glm::vec4 surfaceNormal;
+	float distance;
+	float padding[3];
+};
+
+struct Sphere
+{
+	glm::vec4 position;
+	glm::vec4 diffuseReflectivity;
+	float radius;
+	float padding[3];
 };
 
 glm::vec2 dir;
@@ -325,8 +337,8 @@ void cursorPosCallback(GLFWwindow* _window, double _xPos, double _yPos)
 	prevYPos = _yPos;
 
 	const static float rotationSpeed = 1.f;
-	rotation.x += rotationSpeed * deltaX;
-	rotation.y += rotationSpeed * -deltaY;
+	rotation.x += (float)(rotationSpeed * deltaX);
+	rotation.y += (float)(rotationSpeed * -deltaY);
 	if(rotation.x > 180.f)
 		rotation.x -= 360.f;
 	if(rotation.x < -180.f)
@@ -340,26 +352,29 @@ void cursorPosCallback(GLFWwindow* _window, double _xPos, double _yPos)
 
 int main(int argc, char** argv)
 {
-	const static int width = 640;
-	const static int height = 480;
+	const static int width = 1024;
+	const static int height = 768;
 	const static float speed = 2.f;
+
+	const static std::string WINDOW_TITLE("Raytracing madness");
 
 	try
 	{
-		GLWindow window("Raytracing madness", width, height);
+		GLWindow window(WINDOW_TITLE, width, height);
 		window.setKeyCallback(&keyCallback);
 		window.setMouseCallback(&cursorPosCallback);
 
 		cl::Context context;
 		std::vector<cl::Device> devices;
 		cl::CommandQueue queue;
-		initCL(context, devices, queue, true);
+		initCL(context, devices, queue, false);
 
 		window.createFramebuffer(width, height);
 
 		cl::Kernel kernel = compileKernel(context, devices, "testImage.cl", "testImage");
 		cl::Program rayProgram = createProgramFromFile(context, devices, "rayTracing.cl");
 		cl::Kernel primaryRaysKernel(rayProgram, "primaryRays");
+		cl::Kernel intersectSpheresKernel(rayProgram, "intersectSpheres");
 
 		cl::ImageGL clImage = cl::ImageGL(context, CL_MEM_READ_WRITE, GL_TEXTURE_2D, 0, window.getFramebufferTexture());
 		int imageWidth = window.getFramebufferWidth();
@@ -372,8 +387,9 @@ int main(int argc, char** argv)
 		camera.setViewDirection(glm::vec3(0.f, 0.f, -1.f));
 		camera.setPosition(glm::vec3(0.f, 0.f, 0.f));
 
-		std::vector<ray> primaryRays(width * height);
-		cl::Buffer primaryRaysBuffer(context, CL_MEM_READ_WRITE, primaryRays.size() * sizeof(ray));
+		int numRays = width * height;
+		//std::vector<Ray> primaryRays(numRays);
+		cl::Buffer primaryRaysBuffer(context, CL_MEM_READ_WRITE, numRays * sizeof(Ray));
 
 		primaryRaysKernel.setArg(0, primaryRaysBuffer);
 		primaryRaysKernel.setArg(1, glm::transpose(camera.getInvViewProjectionMatrix()));
@@ -381,44 +397,52 @@ int main(int argc, char** argv)
 		primaryRaysKernel.setArg(3, width);
 		primaryRaysKernel.setArg(4, height);
 
+		const static int NUM_SPHERES = 50;
+		std::vector<Sphere> spheres(NUM_SPHERES);
+		for (Sphere& s : spheres)
+		{
+			s.position = glm::vec4(glm::ballRand(glm::pow((float)NUM_SPHERES, 1.f/3.f) * 3.f), 1.f);
+			s.diffuseReflectivity = glm::vec4(glm::abs(glm::sphericalRand(0.5f)), 1.f);
+			s.radius = glm::linearRand(0.1f, 2.f);
+		}
+
+		cl::Buffer spheresBuffer(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, sizeof(Sphere) * NUM_SPHERES, spheres.data());
+
+		intersectSpheresKernel.setArg(0, primaryRaysBuffer);
+		intersectSpheresKernel.setArg(1, numRays);
+		intersectSpheresKernel.setArg(2, spheresBuffer);
+		intersectSpheresKernel.setArg(3, NUM_SPHERES);
+
 		cl::NDRange local(32, 8);
 		cl::NDRange global(toMultiple(width, local[0]), toMultiple(height, local[1]));
-		queue.enqueueReadBuffer(primaryRaysBuffer, true, 0, width * height * sizeof(ray), primaryRays.data());
-		
-		int dummy = 42;
+		//queue.enqueueReadBuffer(primaryRaysBuffer, true, 0, width * height * sizeof(Ray), primaryRays.data());
 
-		/*glm::vec4 tests[] = {
-			glm::vec4(0.f, 0.f, -0.01f, 1.f),
-			glm::vec4(0.f, 0.f, 1.f, 1.f),
-			glm::vec4(0.f, 0.f, -1.f, 1.f),
-			glm::vec4(1.f, 0.f, 0.f, 1.f),
-			glm::vec4(-1.f, 0.f, 0.f, 1.f),
-			glm::vec4(0.f, 1.f, 0.f, 1.f),
-			glm::vec4(0.f, 0.f, 0.f, 1.f)
-		};
+		typedef std::chrono::duration<double> dSec;
 
-		glm::mat4 m = camera.getViewProjectionMatrix();
-		glm::mat4 invM = camera.getInvViewProjectionMatrix();
-
-		for (auto v : tests)
-		{
-			glm::vec4 mVec = m * v;
-			if (mVec.w != 0.f)
-			{
-				mVec *= 1.f / mVec.w;
-			}
-
-			std::cout << "m    * " << v << " => " << mVec << std::endl;
-			glm::vec4 nVec = invM * v;
-			std::cout << "invM * " << v << " => " << nVec / nVec.w << std::endl;
-		}*/
+		auto currentTime = std::chrono::high_resolution_clock::now();
+		auto prevTime = currentTime;
+		auto prevPrint = currentTime;
+		int frames = 0;
 
 		while (!window.shouldClose())
 		{
-			float deltaTime = 0.001f;
+			frames++;
+
+			prevTime = currentTime;
+			currentTime = std::chrono::high_resolution_clock::now();
+
+			if (std::chrono::duration_cast<std::chrono::seconds>(currentTime - prevPrint).count() > 0)
+			{
+				prevPrint += std::chrono::seconds(1);
+				window.setTitle(WINDOW_TITLE + " | FPS: " + std::to_string(frames));
+				std::cout << "FPS: " << frames << ", Average frame time: " << std::fixed << std::setprecision(2) << 1000.0 / frames << " ms" << std::endl;
+				frames = 0;
+			}
+
+			double deltaTime = dSec(currentTime - prevTime).count();
 			if (dir != glm::vec2(0.f))
 			{
-				glm::vec2 velocity = glm::normalize(dir) * speed * deltaTime;
+				glm::vec2 velocity = glm::normalize(dir) * (float)(speed * deltaTime);
 				glm::mat4 rotY = glm::rotate(glm::mat4(), -rotation.x, glm::vec3(0.f, 1.f, 0.f));
 				camera.setPosition(camera.getPosition() + glm::vec3(rotY * glm::vec4(velocity.x, 0.f, velocity.y, 0.f)));
 			}
@@ -430,14 +454,23 @@ int main(int argc, char** argv)
 			primaryRaysKernel.setArg(1, glm::transpose(camera.getInvViewProjectionMatrix()));
 			primaryRaysKernel.setArg(2, glm::vec4(camera.getPosition(), 1.f));
 
-			cl::Event tEv;
-			queue.enqueueNDRangeKernel(primaryRaysKernel, cl::NullRange, global, local, nullptr, &tEv);
-			tEv.wait();
+			cl::Event primEvent;
+			queue.enqueueNDRangeKernel(primaryRaysKernel, cl::NullRange, global, local, nullptr, &primEvent);
+
+			std::vector<cl::Event> events;
+			events.push_back(primEvent);
+
+			cl::Event interEvent;
+			queue.enqueueNDRangeKernel(intersectSpheresKernel, cl::NullRange, cl::NDRange(numRays), cl::NDRange(32), &events, &interEvent);
+
+			events.push_back(interEvent);
 
 			queue.enqueueAcquireGLObjects(&glObjects);
 
 			// Render
-			runImageKernel(queue, kernel, clImage, primaryRaysBuffer, imageWidth, imageHeight);
+			cl::Event imageEvent;
+			runImageKernel(queue, kernel, clImage, primaryRaysBuffer, imageWidth, imageHeight, &events, &imageEvent);
+			imageEvent.wait();
 
 			queue.enqueueReleaseGLObjects(&glObjects);
 			queue.finish();
