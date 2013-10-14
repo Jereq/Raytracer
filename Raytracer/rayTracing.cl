@@ -53,36 +53,39 @@ __kernel void primaryRays(__global Ray* _res, const mat4 _invMat, const float4 _
 }
 
 // http://www.scratchapixel.com/lessons/3d-basic-lessons/lesson-7-intersecting-simple-shapes/ray-sphere-intersection/
+// Real-Time Rendering, pg. 741
 bool sphereIntersect(Ray* _ray, __constant Sphere* _sphere)
 {
-	float3 rDistance = _sphere->position.xyz - _ray->position.xyz;
-	float rayDist = dot(rDistance, _ray->direction.xyz);
+	float4 rDistance = _sphere->position - _ray->position;
+	float rayDist = dot(rDistance, _ray->direction);
+	float rDist2 = dot(rDistance, rDistance);
+	float radius2 = _sphere->radius * _sphere->radius;
 
-	if (rayDist < 0.f)
+	if (rayDist < 0.f && rDist2 > radius2)
 	{
 		return false;
 	}
 
-	float centerDistance2 = dot(rDistance, rDistance) - rayDist * rayDist;
-	if (centerDistance2 > _sphere->radius * _sphere->radius)
+	float centerDistance2 = rDist2 - rayDist * rayDist;
+	if (centerDistance2 > radius2)
 	{
 		return false;
 	}
 
-	float rayDistInSphere = sqrt(_sphere->radius * _sphere->radius - centerDistance2);
-	float t0 = rayDist - rayDistInSphere;
-	float t1 = rayDist + rayDistInSphere;
+	float rayDistInSphere = sqrt(radius2 - centerDistance2);
 
-	if (t0 > _ray->distance)
+	float t = rayDist + ((rDist2 > radius2) ? -rayDistInSphere : rayDistInSphere);
+
+	if (t > _ray->distance)
 	{
 		return false;
 	}
 	
-	_ray->distance = t0;
+	_ray->distance = t;
 	_ray->diffuseReflectivity = _sphere->diffuseReflectivity;
 
-	float3 intersectPoint = _ray->position.xyz + _ray->direction.xyz * t0;
-	_ray->surfaceNormal = normalize(intersectPoint - _sphere->position.xyz);
+	float4 intersectPoint = _ray->position + _ray->direction * t;
+	_ray->surfaceNormal = normalize(intersectPoint - _sphere->position).xyz;
 
 	return true;
 }
