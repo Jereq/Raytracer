@@ -29,6 +29,34 @@ void GLWindow::initOpenGL(const std::string& _title)
 		oss << "Failed to initialize GLEW: (" << err << ") " << glewGetErrorString(err) << std::endl;
 		throw std::exception(oss.str().c_str());
 	}
+
+	if (!shader.compileShaderFromFile("simple.vert", GLSLShaderType::VERTEX)
+		|| !shader.compileShaderFromFile("simple.frag", GLSLShaderType::FRAGMENT)
+		|| !shader.link())
+	{
+		std::cout << shader.log();
+	}
+
+	const static glm::vec2 rectPos[] = 
+	{
+		glm::vec2(-1.f, -1.f),
+		glm::vec2(-1.f,  1.f),
+		glm::vec2( 1.f,  1.f),
+		glm::vec2(-1.f, -1.f),
+		glm::vec2( 1.f, -1.f),
+		glm::vec2( 1.f,  1.f)
+	};
+
+	glGenBuffers(1, &rectVBO);
+	glGenVertexArrays(1, &rectVAO);
+
+	glBindVertexArray(rectVAO);
+	glEnableVertexAttribArray(0);
+
+	glBindBuffer(GL_ARRAY_BUFFER, rectVBO);
+	glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(glm::vec2), nullptr);
+
+	glBufferData(GL_ARRAY_BUFFER, sizeof(rectPos), rectPos, GL_STATIC_DRAW);
 }
 
 GLWindow::GLWindow(const std::string& _title, int _width, int _height)
@@ -45,6 +73,8 @@ GLWindow::GLWindow(const std::string& _title, int _width, int _height)
 
 GLWindow::~GLWindow()
 {
+	glDeleteBuffers(1, &rectVBO);
+	glDeleteVertexArrays(1, &rectVAO);
 	destroyFramebuffer();
 	glfwTerminate();
 }
@@ -62,6 +92,9 @@ bool GLWindow::createFramebuffer(GLuint _framebufferWidth, GLuint _framebufferHe
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, framebufferWidth, framebufferHeight, 0, GL_RGBA, GL_FLOAT, nullptr);
 
 	glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, framebufferTexture, 0);
+	
+	shader.use();
+	shader.setUniform("tex", 0);
 
 	glBindTexture(GL_TEXTURE_2D, 0);
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
@@ -86,12 +119,29 @@ void GLWindow::destroyFramebuffer()
 
 void GLWindow::blitFramebuffer()
 {
-	glBindFramebuffer(GL_READ_FRAMEBUFFER, framebuffer);
-	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
-
-	glBlitFramebuffer(0, 0, framebufferWidth, framebufferHeight, 0, 0, width, height, GL_COLOR_BUFFER_BIT, GL_LINEAR);
+	glm::vec4 data(1.f, 1.f, 1.f, 1.f);
+	GLuint t;
+	glGenTextures(1, &t);
+	glBindTexture(GL_TEXTURE_2D, t);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, 1, 1, 0, GL_RGBA, GL_FLOAT, &data[0]);
 
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+	shader.use();
+	shader.setUniform("tex", 0);
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_2D, t);
+
+	glBindVertexArray(rectVAO);
+
+	glDrawArrays(GL_TRIANGLES, 0, 2);
+
+	//glBindFramebuffer(GL_READ_FRAMEBUFFER, framebuffer);
+	//glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+
+	//glBlitFramebuffer(0, 0, framebufferWidth, framebufferHeight, 0, 0, width, height, GL_COLOR_BUFFER_BIT, GL_LINEAR);
+
+	//glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
 void GLWindow::clearFramebuffer(float _red, float _green, float _blue)

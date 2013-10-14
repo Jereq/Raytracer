@@ -28,6 +28,9 @@
     <ClCompile Include="Camera.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="GLSLProgram.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="cl.hpp">
@@ -39,6 +42,9 @@
     <ClInclude Include="Camera.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="GLSLProgram.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="vector_add_gpu.cl">
@@ -48,6 +54,12 @@
       <Filter>Kernel Files</Filter>
     </None>
     <None Include="rayTracing.cl">
+      <Filter>Kernel Files</Filter>
+    </None>
+    <None Include="simple.vert">
+      <Filter>Kernel Files</Filter>
+    </None>
+    <None Include="simple.frag">
       <Filter>Kernel Files</Filter>
     </None>
   </ItemGroup>

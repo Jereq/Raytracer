@@ -2,10 +2,12 @@
 
 #include <GL/glew.h>
 #include <GL/wglew.h>
-
 #include <GLFW/glfw3.h>
 
+#include <glm/glm.hpp>
 #include <iostream>
+
+#include "GLSLProgram.h"
 
 class GLWindow
 {
@@ -18,6 +20,10 @@ private:
 	GLuint framebufferTexture;
 	GLuint framebufferWidth;
 	GLuint framebufferHeight;
+
+	GLSLProgram shader;
+	GLuint rectVBO;
+	GLuint rectVAO;
 
 	void initOpenGL(const std::string& _title);
 

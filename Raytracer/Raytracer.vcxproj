@@ -76,16 +76,20 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="Camera.cpp" />
+    <ClCompile Include="GLSLProgram.cpp" />
     <ClCompile Include="GLWindow.cpp" />
     <ClCompile Include="program.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Camera.h" />
     <ClInclude Include="cl.hpp" />
+    <ClInclude Include="GLSLProgram.h" />
     <ClInclude Include="GLWindow.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="rayTracing.cl" />
+    <None Include="simple.frag" />
+    <None Include="simple.vert" />
     <None Include="testImage.cl" />
     <None Include="vector_add_gpu.cl" />
   </ItemGroup>
