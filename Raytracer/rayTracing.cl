@@ -10,15 +10,15 @@ typedef struct Ray
 {
 	float4 position;
 	float4 direction;
-	float3 diffuseReflectivity;
-	float3 surfaceNormal;
+	float4 diffuseReflectivity;
+	float4 surfaceNormal;
 	float distance;
 } Ray;
 
 typedef struct Sphere
 {
 	float4 position;
-	float3 diffuseReflectivity;
+	float4 diffuseReflectivity;
 	float radius;
 } Sphere;
 
@@ -85,7 +85,7 @@ bool sphereIntersect(Ray* _ray, __constant Sphere* _sphere)
 	_ray->diffuseReflectivity = _sphere->diffuseReflectivity;
 
 	float4 intersectPoint = _ray->position + _ray->direction * t;
-	_ray->surfaceNormal = normalize(intersectPoint - _sphere->position).xyz;
+	_ray->surfaceNormal = normalize(intersectPoint - _sphere->position);
 
 	return true;
 }

@@ -245,11 +245,11 @@ void runKernel(cl::CommandQueue& _queue, cl::Kernel& _kernel, size_t size, cl::B
 	event.wait();
 }
 
-void runImageKernel(cl::CommandQueue& _queue, cl::Kernel& _kernel, cl::ImageGL& _image, cl::Buffer& _rays, int _width, int _height, std::vector<cl::Event>* _events, cl::Event* _outEvent)
+void runImageKernel(cl::CommandQueue& _queue, cl::Kernel& _kernel, cl::BufferRenderGL& _renderbuffer, cl::Buffer& _rays, int _width, int _height, std::vector<cl::Event>* _events, cl::Event* _outEvent)
 {
 	//std::cout << "Setting kernel arguments..." << std::endl;
 
-	_kernel.setArg(0, _image);
+	_kernel.setArg(0, _renderbuffer);
 	_kernel.setArg(1, _rays);
 
 	//std::cout << "Starting kernel..." << std::endl;
@@ -448,12 +448,13 @@ int main(int argc, char** argv)
 		cl::Kernel primaryRaysKernel(rayProgram, "primaryRays");
 		cl::Kernel intersectSpheresKernel(rayProgram, "intersectSpheres");
 
-		cl::ImageGL clImage = cl::ImageGL(context, CL_MEM_READ_WRITE, GL_TEXTURE_2D, 0, window.getFramebufferTexture());
+		cl::BufferRenderGL renderbuffer(context, CL_MEM_READ_WRITE, window.getRenderbuffer());
+
 		int imageWidth = window.getFramebufferWidth();
 		int imageHeight = window.getFramebufferHeight();
 
 		std::vector<cl::Memory> glObjects;
-		glObjects.push_back(clImage);
+		glObjects.push_back(renderbuffer);
 
 		Camera camera(45.f, (float)width / (float)height);
 		camera.setViewDirection(glm::vec3(0.f, 0.f, -1.f));
@@ -492,6 +493,7 @@ int main(int argc, char** argv)
 		auto prevTime = currentTime;
 		auto prevPrint = currentTime;
 		int frames = 0;
+		initTimer();
 
 		while (!window.shouldClose())
 		{
@@ -546,7 +548,7 @@ int main(int argc, char** argv)
 
 			// Render
 			cl::Event imageEvent;
-			runImageKernel(queue, kernel, clImage, primaryRaysBuffer, imageWidth, imageHeight, &events, &imageEvent);
+			runImageKernel(queue, kernel, renderbuffer, primaryRaysBuffer, imageWidth, imageHeight, &events, &imageEvent);
 
 			events.push_back(imageEvent);
 

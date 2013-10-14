@@ -15,7 +15,7 @@ private:
 	int height;
 
 	GLuint framebuffer;
-	GLuint framebufferTexture;
+	GLuint renderbuffer;
 	GLuint framebufferWidth;
 	GLuint framebufferHeight;
 
@@ -31,7 +31,7 @@ public:
 	void clearFramebuffer(float _red, float _green, float _blue);
 	void clearBackbuffer(float _red,  float _green, float _blue);
 	void drawFramebuffer();
-	GLuint getFramebufferTexture() const;
+	GLuint getRenderbuffer() const;
 	GLuint getFramebufferWidth() const;
 	GLuint getFramebufferHeight() const;
 

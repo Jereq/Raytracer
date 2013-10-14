@@ -9,6 +9,10 @@ void GLWindow::initOpenGL(const std::string& _title)
 	{
 		throw std::exception("Failed to initialize GLFW.");
 	}
+	
+	glfwDefaultWindowHints();
+	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
+	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
 
 	window = glfwCreateWindow(width, height, _title.c_str(), nullptr, nullptr);
 	if (!window)
@@ -36,7 +40,7 @@ GLWindow::GLWindow(const std::string& _title, int _width, int _height)
 	  width(_width),
 	  height(_height),
 	  framebuffer(0),
-	  framebufferTexture(0),
+	  renderbuffer(0),
 	  framebufferWidth(0),
 	  framebufferHeight(0)
 {
@@ -57,13 +61,13 @@ bool GLWindow::createFramebuffer(GLuint _framebufferWidth, GLuint _framebufferHe
 	glGenFramebuffers(1, &framebuffer);
 	glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
 
-	glGenTextures(1, &framebufferTexture);
-	glBindTexture(GL_TEXTURE_2D, framebufferTexture);
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, framebufferWidth, framebufferHeight, 0, GL_RGBA, GL_FLOAT, nullptr);
+	glGenRenderbuffers(1, &renderbuffer);
+	glBindRenderbuffer(GL_RENDERBUFFER, renderbuffer);
+	glRenderbufferStorage(GL_RENDERBUFFER, GL_RGBA32F, framebufferWidth, framebufferHeight);
 
-	glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, framebufferTexture, 0);
+	glFramebufferRenderbuffer(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, renderbuffer);
 
-	glBindTexture(GL_TEXTURE_2D, 0);
+	glBindRenderbuffer(GL_RENDERBUFFER, 0);
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
 	return true;
@@ -77,10 +81,10 @@ void GLWindow::destroyFramebuffer()
 		framebuffer = 0;
 	}
 
-	if (framebufferTexture)
+	if (renderbuffer)
 	{
-		glDeleteTextures(1, &framebufferTexture);
-		framebufferTexture = 0;
+		glDeleteRenderbuffers(1, &renderbuffer);
+		renderbuffer = 0;
 	}
 }
 
@@ -120,9 +124,9 @@ void GLWindow::drawFramebuffer()
 	glfwPollEvents();
 }
 
-GLuint GLWindow::getFramebufferTexture() const
+GLuint GLWindow::getRenderbuffer() const
 {
-	return framebufferTexture;
+	return renderbuffer;
 }
 
 GLuint GLWindow::getFramebufferWidth() const
