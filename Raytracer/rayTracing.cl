@@ -22,6 +22,19 @@ typedef struct Sphere
 	float radius;
 } Sphere;
 
+typedef struct Vertex
+{
+	float4 position;
+	float4 textureCoord;
+	float4 normal;
+	float4 tangent;
+	float4 biTangent;
+} Vertex;
+
+typedef struct Triangle
+{
+	Vertex v[3];
+} Triangle;
 
 float4 matmul(const mat4* _mat, const float4* _vec)
 {
@@ -101,6 +114,62 @@ __kernel void intersectSpheres(__global Ray* _rays, int numRays, __constant Sphe
 	for (unsigned int i = 0; i < _numSpheres; i++)
 	{
 		sphereIntersect(&r, &_spheres[i]);
+	}
+
+	_rays[id] = r;
+}
+
+// Real-Time Rendering, pg. 750
+bool triangleIntersect(Ray* _ray, __global Triangle* _triangle)
+{
+	float4 e1 = _triangle->v[1].position - _triangle->v[0].position;
+	float4 e2 = _triangle->v[2].position - _triangle->v[0].position;
+	
+	float4 q = cross(_ray->direction, e2);
+	float a = dot(e1, q);
+	if(fabs(a) < 0.00001f)
+		return false;
+
+	float f = 1.f / a;
+
+	float4 s = _ray->position - _triangle->v[0].position;
+	float u = f * dot(s, q);
+	if(u < 0.f)
+		return false;
+
+	float4 r = cross(s, e1);
+	float v = f * dot(_ray->direction, r);
+	if(v < 0.f || u + v > 1.f)
+		return false;
+
+	float t = f * dot(e2, r);
+
+	if (t > _ray->distance || t <= 0.f)
+	{
+		return false;
+	}
+
+	_ray->distance = t;
+	_ray->diffuseReflectivity = (1.f - u - v) * _triangle->v[0].textureCoord + u * _triangle->v[1].textureCoord + v * _triangle->v[2].textureCoord;
+	_ray->diffuseReflectivity.w = 1.f;
+
+	float4 intersectPoint = _ray->position + _ray->direction * t;
+	_ray->surfaceNormal = (1.f - u - v) * _triangle->v[0].normal + u * _triangle->v[1].normal + v * _triangle->v[2].normal;
+
+	return true;
+}
+
+__kernel void intersectTriangles(__global Ray* _rays, int numRays, __global Triangle* _triangles, int _numTriangles)
+{
+	int id = get_global_id(0);
+	if (id > numRays)
+		return;
+
+	Ray r = _rays[id];
+
+	for (unsigned int i = 0; i < _numTriangles; i++)
+	{
+		triangleIntersect(&r, &_triangles[i]);
 	}
 
 	_rays[id] = r;

@@ -77,12 +77,14 @@
   <ItemGroup>
     <ClCompile Include="Camera.cpp" />
     <ClCompile Include="GLWindow.cpp" />
+    <ClCompile Include="ObjModel.cpp" />
     <ClCompile Include="program.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Camera.h" />
     <ClInclude Include="cl.hpp" />
     <ClInclude Include="GLWindow.h" />
+    <ClInclude Include="ObjModel.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="rayTracing.cl" />

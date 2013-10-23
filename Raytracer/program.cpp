@@ -1,6 +1,7 @@
 #include "Camera.h"
 #include "GLWindow.h"
 
+
 #define __CL_ENABLE_EXCEPTIONS
 #define CL_GL_INTEROP
 #include <CL/cl.hpp>
@@ -15,6 +16,8 @@
 #include <iostream>
 #include <thread>
 #include <vector>
+
+#include "ObjModel.h"
 
 void printPlatformInfo(cl::Platform& plat)
 {
@@ -218,33 +221,6 @@ cl::Kernel compileKernel(cl::Context& _context, std::vector<cl::Device>& _device
 	return cl::Kernel(program, _kernelName.c_str());
 }
 
-void runKernel(cl::CommandQueue& _queue, cl::Kernel& _kernel, size_t size, cl::Buffer& a, cl::Buffer& b, cl::Buffer& res)
-{
-	//std::cout << "Setting kernel arguments..." << std::endl;
-
-	_kernel.setArg(0, a);
-	_kernel.setArg(1, b);
-	_kernel.setArg(2, res);
-	_kernel.setArg(3, size);
-		
-	//std::cout << "Starting kernel..." << std::endl;
-		
-	size_t local_ws = 256;
-	size_t global_ws = ((size + local_ws - 1) / local_ws) * local_ws;
-	cl::Event event;
-	_queue.enqueueNDRangeKernel(
-		_kernel,
-		cl::NullRange,
-		cl::NDRange(global_ws),
-		cl::NDRange(local_ws),
-		nullptr,
-		&event);
-
-	//std::cout << "Waiting..." << std::endl;
-
-	event.wait();
-}
-
 void runImageKernel(cl::CommandQueue& _queue, cl::Kernel& _kernel, cl::BufferRenderGL& _renderbuffer, cl::Buffer& _rays, int _width, int _height, std::vector<cl::Event>* _events, cl::Event* _outEvent)
 {
 	//std::cout << "Setting kernel arguments..." << std::endl;
@@ -417,19 +393,27 @@ void printTimersAndReset()
 	}
 }
 
+cl::Event runKernel(const cl::CommandQueue& queue, const cl::Kernel& kernel, const cl::NDRange& globalSize, const cl::NDRange& groupSize, std::vector<cl::Event>& events)
+{
+	cl::Event event;
+	queue.enqueueNDRangeKernel(kernel, cl::NullRange, globalSize, groupSize, &events, &event);
+	events.push_back(event);
+	return event;
+}
+
 int main(int argc, char** argv)
 {
 	const static int width = 1024;
 	const static int height = 768;
 	const static float speed = 2.f;
 
-	const static int NUM_SPHERES = 100;
+	const static int NUM_SPHERES = 10;
 
 	const static std::string WINDOW_TITLE("Raytracing madness");
 
 	const static std::chrono::system_clock::duration MEASURE_TIME(std::chrono::seconds(5));
 	const static double MEASURE_TIME_D = std::chrono::duration_cast<std::chrono::duration<double>>(MEASURE_TIME).count();
-
+	
 	try
 	{
 		GLWindow window(WINDOW_TITLE, width, height);
@@ -447,6 +431,7 @@ int main(int argc, char** argv)
 		cl::Program rayProgram = createProgramFromFile(context, devices, "rayTracing.cl");
 		cl::Kernel primaryRaysKernel(rayProgram, "primaryRays");
 		cl::Kernel intersectSpheresKernel(rayProgram, "intersectSpheres");
+		cl::Kernel intersectTrianglesKernel(rayProgram, "intersectTriangles");
 
 		cl::BufferRenderGL renderbuffer(context, CL_MEM_READ_WRITE, window.getRenderbuffer());
 
@@ -495,6 +480,14 @@ int main(int argc, char** argv)
 		int frames = 0;
 		initTimer();
 
+		ObjModel objModel;
+		objModel.Initialize(context, "resources/cube.obj");
+
+		intersectTrianglesKernel.setArg(0, primaryRaysBuffer);
+		intersectTrianglesKernel.setArg(1, numRays);
+		intersectTrianglesKernel.setArg(2, objModel.getBuffer());
+		intersectTrianglesKernel.setArg(3, objModel.GetVertexCount() / 3);
+
 		while (!window.shouldClose())
 		{
 			frames++;
@@ -530,16 +523,11 @@ int main(int argc, char** argv)
 			primaryRaysKernel.setArg(1, glm::transpose(camera.getInvViewProjectionMatrix()));
 			primaryRaysKernel.setArg(2, glm::vec4(camera.getPosition(), 1.f));
 
-			cl::Event primEvent;
-			queue.enqueueNDRangeKernel(primaryRaysKernel, cl::NullRange, global, local, nullptr, &primEvent);
-
 			std::vector<cl::Event> events;
-			events.push_back(primEvent);
 
-			cl::Event interEvent;
-			queue.enqueueNDRangeKernel(intersectSpheresKernel, cl::NullRange, cl::NDRange(numRays), cl::NDRange(32), &events, &interEvent);
-
-			events.push_back(interEvent);
+			cl::Event primEvent = runKernel(queue, primaryRaysKernel, global, local, events);
+			cl::Event interEvent = runKernel(queue, intersectSpheresKernel, cl::NDRange(numRays), cl::NDRange(32), events);
+			cl::Event triangleEvent = runKernel(queue, intersectTrianglesKernel, cl::NDRange(numRays), cl::NDRange(32), events);
 
 			cl::Event aqEvent;
 			queue.enqueueAcquireGLObjects(&glObjects, &events, &aqEvent);
@@ -565,6 +553,7 @@ int main(int argc, char** argv)
 
 			incTime("Primary rays", getExecutionTime(primEvent));
 			incTime("Intersection Spheres", getExecutionTime(interEvent));
+			incTime("Intersection Triangles", getExecutionTime(triangleEvent));
 			incTime("Shading pass", getExecutionTime(imageEvent));
 			incTime("Aquire objects", getExecutionTime(aqEvent));
 			incTime("Release objects", getExecutionTime(relEvent));
