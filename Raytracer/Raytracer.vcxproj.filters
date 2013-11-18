@@ -33,9 +33,6 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="cl.hpp">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="GLWindow.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -43,6 +40,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="ObjModel.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="CL\cl.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

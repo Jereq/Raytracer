@@ -1,7 +1,7 @@
 #pragma once
 //#include "TextureArray.h"
 #include <glm/glm.hpp>
-#include <CL/cl.hpp>
+#include "CL/cl.hpp"
 #include <vector>
 using std::vector;
 

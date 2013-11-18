@@ -4,7 +4,7 @@
 
 #define __CL_ENABLE_EXCEPTIONS
 #define CL_GL_INTEROP
-#include <CL/cl.hpp>
+#include "CL/cl.hpp"
 
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -121,7 +121,7 @@ void initCL(cl::Context& _context, std::vector<cl::Device>& _devices, cl::Comman
 	static clGetGLContextInfoKHR_fn clGetGLContextInfoKHR;
 	if (!clGetGLContextInfoKHR)
 	{
-		clGetGLContextInfoKHR = (clGetGLContextInfoKHR_fn) clGetExtensionFunctionAddressForPlatform(platforms[0](), "clGetGLContextInfoKHR");
+		clGetGLContextInfoKHR = (clGetGLContextInfoKHR_fn) clGetExtensionFunctionAddress("clGetGLContextInfoKHR");
 		if (!clGetGLContextInfoKHR)
 		{
 			throw std::exception("Failed to query proc address for clGetGLContextInfoKHR.");

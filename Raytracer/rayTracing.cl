@@ -36,6 +36,17 @@ typedef struct Triangle
 	Vertex v[3];
 } Triangle;
 
+typedef struct Light
+{
+	float4 position;
+	float4 intensity;
+} Light;
+
+__constant Light l = {
+	{0.f, 0.f, 50.f, 1.f},
+	{0.7f, 0.7f, 0.7f, 0.f}
+};
+
 float4 matmul(const mat4* _mat, const float4* _vec)
 {
 	float4 res = {
@@ -67,7 +78,7 @@ __kernel void primaryRays(__global Ray* _res, const mat4 _invMat, const float4 _
 
 // http://www.scratchapixel.com/lessons/3d-basic-lessons/lesson-7-intersecting-simple-shapes/ray-sphere-intersection/
 // Real-Time Rendering, pg. 741
-bool sphereIntersect(Ray* _ray, __constant Sphere* _sphere)
+bool findSphereIntersectDistance(Ray* _ray, __constant Sphere* _sphere, float* t)
 {
 	float4 rDistance = _sphere->position - _ray->position;
 	float rayDist = dot(rDistance, _ray->direction);
@@ -87,9 +98,20 @@ bool sphereIntersect(Ray* _ray, __constant Sphere* _sphere)
 
 	float rayDistInSphere = sqrt(radius2 - centerDistance2);
 
-	float t = rayDist + ((rDist2 > radius2) ? -rayDistInSphere : rayDistInSphere);
+	*t = rayDist + ((rDist2 > radius2) ? -rayDistInSphere : rayDistInSphere);
 
-	if (t > _ray->distance)
+	if (*t > _ray->distance)
+	{
+		return false;
+	}
+
+	return true;
+}
+
+bool sphereIntersect(Ray* _ray, __constant Sphere* _sphere)
+{
+	float t = 0.f;
+	if (!findSphereIntersectDistance(_ray, _sphere, &t))
 	{
 		return false;
 	}
