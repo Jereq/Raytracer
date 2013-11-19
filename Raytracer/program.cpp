@@ -260,7 +260,9 @@ struct Ray
 	glm::vec4 diffuseReflectivity;
 	glm::vec4 surfaceNormal;
 	float distance;
-	float padding[3];
+	int inShadow;
+	int collideGroup;
+	int collideObject;
 };
 
 struct Sphere
@@ -269,6 +271,12 @@ struct Sphere
 	glm::vec4 diffuseReflectivity;
 	float radius;
 	float padding[3];
+};
+
+struct Light
+{
+	glm::vec4 position;
+	glm::vec4 intensity;
 };
 
 glm::vec2 dir;
@@ -430,8 +438,9 @@ int main(int argc, char** argv)
 		cl::Kernel kernel = compileKernel(context, devices, "testImage.cl", "testImage");
 		cl::Program rayProgram = createProgramFromFile(context, devices, "rayTracing.cl");
 		cl::Kernel primaryRaysKernel(rayProgram, "primaryRays");
-		cl::Kernel intersectSpheresKernel(rayProgram, "intersectSpheres");
-		cl::Kernel intersectTrianglesKernel(rayProgram, "intersectTriangles");
+		cl::Kernel findClosestSpheresKernel(rayProgram, "findClosestSpheres");
+		cl::Kernel findClosestTrianglesKernel(rayProgram, "findClosestTriangles");
+		cl::Kernel detectShadowWithSpheres(rayProgram, "detectShadowWithSpheres");
 
 		cl::BufferRenderGL renderbuffer(context, CL_MEM_READ_WRITE, window.getRenderbuffer());
 
@@ -464,10 +473,24 @@ int main(int argc, char** argv)
 
 		cl::Buffer spheresBuffer(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, sizeof(Sphere) * NUM_SPHERES, spheres.data());
 
-		intersectSpheresKernel.setArg(0, primaryRaysBuffer);
-		intersectSpheresKernel.setArg(1, numRays);
-		intersectSpheresKernel.setArg(2, spheresBuffer);
-		intersectSpheresKernel.setArg(3, NUM_SPHERES);
+		findClosestSpheresKernel.setArg(0, primaryRaysBuffer);
+		findClosestSpheresKernel.setArg(1, numRays);
+		findClosestSpheresKernel.setArg(2, spheresBuffer);
+		findClosestSpheresKernel.setArg(3, NUM_SPHERES);
+
+		Light light = { glm::vec4(0.f, 0.f, 50.f, 1.f), glm::vec4(0.7f, 0.7f, 0.7f, 0.f) };
+		
+		std::vector<Light> pointLight;
+		pointLight.push_back(light);
+
+		cl::Buffer lightBuffer(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, sizeof(Light) * pointLight.size(), pointLight.data());
+
+		detectShadowWithSpheres.setArg(0, primaryRaysBuffer);
+		detectShadowWithSpheres.setArg(1, numRays);
+		detectShadowWithSpheres.setArg(2, spheresBuffer);
+		detectShadowWithSpheres.setArg(3, NUM_SPHERES);
+		detectShadowWithSpheres.setArg(4, lightBuffer);
+		detectShadowWithSpheres.setArg(5, 0);
 
 		cl::NDRange local(32, 8);
 		cl::NDRange global(toMultiple(width, local[0]), toMultiple(height, local[1]));
@@ -483,10 +506,10 @@ int main(int argc, char** argv)
 		ObjModel objModel;
 		objModel.Initialize(context, "resources/cube.obj");
 
-		intersectTrianglesKernel.setArg(0, primaryRaysBuffer);
-		intersectTrianglesKernel.setArg(1, numRays);
-		intersectTrianglesKernel.setArg(2, objModel.getBuffer());
-		intersectTrianglesKernel.setArg(3, objModel.GetVertexCount() / 3);
+		findClosestTrianglesKernel.setArg(0, primaryRaysBuffer);
+		findClosestTrianglesKernel.setArg(1, numRays);
+		findClosestTrianglesKernel.setArg(2, objModel.getBuffer());
+		findClosestTrianglesKernel.setArg(3, objModel.GetVertexCount() / 3);
 
 		while (!window.shouldClose())
 		{
@@ -526,8 +549,9 @@ int main(int argc, char** argv)
 			std::vector<cl::Event> events;
 
 			cl::Event primEvent = runKernel(queue, primaryRaysKernel, global, local, events);
-			cl::Event interEvent = runKernel(queue, intersectSpheresKernel, cl::NDRange(numRays), cl::NDRange(32), events);
-			cl::Event triangleEvent = runKernel(queue, intersectTrianglesKernel, cl::NDRange(numRays), cl::NDRange(32), events);
+			cl::Event interEvent = runKernel(queue, findClosestSpheresKernel, cl::NDRange(numRays), cl::NDRange(32), events);
+			cl::Event triangleEvent = runKernel(queue, findClosestTrianglesKernel, cl::NDRange(numRays), cl::NDRange(32), events);
+			cl::Event sphereShadowEvent = runKernel(queue, detectShadowWithSpheres, cl::NDRange(numRays), cl::NDRange(32), events);
 
 			cl::Event aqEvent;
 			queue.enqueueAcquireGLObjects(&glObjects, &events, &aqEvent);
@@ -557,6 +581,7 @@ int main(int argc, char** argv)
 			incTime("Shading pass", getExecutionTime(imageEvent));
 			incTime("Aquire objects", getExecutionTime(aqEvent));
 			incTime("Release objects", getExecutionTime(relEvent));
+			incTime("Shadow spheres", getExecutionTime(sphereShadowEvent));
 
 			incTime("Total OpenCL", std::chrono::duration_cast<std::chrono::nanoseconds>(drawStart - startCL).count());
 			incTime("OpenCL enqueue work", std::chrono::duration_cast<std::chrono::nanoseconds>(endCL - startCL).count());

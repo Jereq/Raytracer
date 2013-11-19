@@ -13,6 +13,9 @@ typedef struct Ray
 	float4 diffuseReflectivity;
 	float4 surfaceNormal;
 	float distance;
+	int inShadow;
+	int collideGroup;
+	int collideObject;
 } Ray;
 
 typedef struct Sphere
@@ -74,6 +77,9 @@ __kernel void primaryRays(__global Ray* _res, const mat4 _invMat, const float4 _
 	_res[pos.x + _width * pos.y].position = _camPos;
 	_res[pos.x + _width * pos.y].direction = normalize(worldPos - _camPos);
 	_res[pos.x + _width * pos.y].distance = INFINITY;
+	_res[pos.x + _width * pos.y].inShadow = false;
+	_res[pos.x + _width * pos.y].collideGroup = -1;
+	_res[pos.x + _width * pos.y].collideGroup = -1;
 }
 
 // http://www.scratchapixel.com/lessons/3d-basic-lessons/lesson-7-intersecting-simple-shapes/ray-sphere-intersection/
@@ -125,7 +131,7 @@ bool sphereIntersect(Ray* _ray, __constant Sphere* _sphere)
 	return true;
 }
 
-__kernel void intersectSpheres(__global Ray* _rays, int numRays, __constant Sphere* _spheres, int _numSpheres)
+__kernel void findClosestSpheres(__global Ray* _rays, int numRays, __constant Sphere* _spheres, int _numSpheres)
 {
 	int id = get_global_id(0);
 	if (id > numRays)
@@ -135,7 +141,37 @@ __kernel void intersectSpheres(__global Ray* _rays, int numRays, __constant Sphe
 
 	for (unsigned int i = 0; i < _numSpheres; i++)
 	{
-		sphereIntersect(&r, &_spheres[i]);
+		if (sphereIntersect(&r, &_spheres[i]))
+		{
+			r.collideGroup = 0;
+			r.collideObject = i;
+		}
+
+	}
+
+	_rays[id] = r;
+}
+
+__kernel void detectShadowWithSpheres(__global Ray* _rays, int numRays, __constant Sphere* _spheres, int _numSpheres, __constant Light* _lights, int _lightIdx)
+{
+	int id = get_global_id(0);
+	if (id > numRays)
+		return;
+
+	Ray r = _rays[id];
+
+	r.position += r.direction * r.distance;
+	float4 relativePos = _lights[_lightIdx].position - r.position;
+	r.distance = length(relativePos);
+	r.direction = relativePos / r.distance;
+
+	float dummy;
+	for (unsigned int i = 0; r.inShadow == falsedww && i < _numSpheres; i++)
+	{
+		if (r.collideGroup == 0 && r.collideObject == i)
+			continue;
+
+		r.inShadow = findSphereIntersectDistance(&r, &_spheres[i], &dummy);
 	}
 
 	_rays[id] = r;
@@ -181,7 +217,7 @@ bool triangleIntersect(Ray* _ray, __global Triangle* _triangle)
 	return true;
 }
 
-__kernel void intersectTriangles(__global Ray* _rays, int numRays, __global Triangle* _triangles, int _numTriangles)
+__kernel void findClosestTriangles(__global Ray* _rays, int numRays, __global Triangle* _triangles, int _numTriangles)
 {
 	int id = get_global_id(0);
 	if (id > numRays)

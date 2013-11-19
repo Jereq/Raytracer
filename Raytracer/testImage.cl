@@ -5,6 +5,9 @@ typedef struct Ray
 	float4 diffuseReflectivity;
 	float4 surfaceNormal;
 	float distance;
+	int inShadow;
+	int collideGroup;
+	int collideObject;
 } Ray;
 
 typedef struct Light
@@ -30,10 +33,16 @@ __kernel void testImage(__write_only image2d_t image, __global Ray* _rays)
 		return;
 	}
 
-	float4 intersectPoint = r.position + r.direction * r.distance;
-	float4 lightDir = normalize(l.position - intersectPoint);
+	float4 color = { 0.f, 0.f, 0.f, 1.f };
 
-	float4 surfaceReflectivity = r.diffuseReflectivity;
-	float4 color = surfaceReflectivity * (l.intensity * max(dot(lightDir, r.surfaceNormal), 0.f) + ambientIntensity);
+	if(r.inShadow == false)
+	{
+		float4 intersectPoint = r.position + r.direction * r.distance;
+		float4 lightDir = normalize(l.position - intersectPoint);
+
+		float4 surfaceReflectivity = r.diffuseReflectivity;
+		color = surfaceReflectivity * (l.intensity * max(dot(lightDir, r.surfaceNormal), 0.f) + ambientIntensity);	
+	}
+	
 	write_imagef(image, pos, (float4)(color.xyz, 1.f));
 }
