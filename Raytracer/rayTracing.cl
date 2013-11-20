@@ -152,18 +152,13 @@ __kernel void findClosestSpheres(__global Ray* _rays, int numRays, __constant Sp
 	_rays[id] = r;
 }
 
-__kernel void detectShadowWithSpheres(__global Ray* _rays, int numRays, __constant Sphere* _spheres, int _numSpheres, __constant Light* _lights, int _lightIdx)
+__kernel void detectShadowWithSpheres(__global Ray* _rays, int _numRays, __constant Sphere* _spheres, int _numSpheres)
 {
 	int id = get_global_id(0);
-	if (id > numRays)
+	if (id > _numRays)
 		return;
 
 	Ray r = _rays[id];
-
-	r.position += r.direction * r.distance;
-	float4 relativePos = _lights[_lightIdx].position - r.position;
-	r.distance = length(relativePos);
-	r.direction = relativePos / r.distance;
 
 	float dummy;
 	for (unsigned int i = 0; r.inShadow == false && i < _numSpheres; i++)
@@ -177,8 +172,24 @@ __kernel void detectShadowWithSpheres(__global Ray* _rays, int numRays, __consta
 	_rays[id] = r;
 }
 
+__kernel void updateRaysToLight(__global Ray* _rays, int _numRays, __constant Light* _lights, int _lightIdx)
+{
+	int id = get_global_id(0);
+	if (id > _numRays)
+		return;
+
+	Ray r = _rays[id];
+
+	r.position += r.direction * r.distance;
+	float4 relativePos = _lights[_lightIdx].position - r.position;
+	r.distance = length(relativePos);
+	r.direction = relativePos / r.distance;
+
+	_rays[id] = r;
+}
+
 // Real-Time Rendering, pg. 750
-bool triangleIntersect(Ray* _ray, __global Triangle* _triangle)
+bool findTriangleIntersectDistance(Ray* _ray, __global Triangle* _triangle, float* t, float* u, float* v)
 {
 	float4 e1 = _triangle->v[1].position - _triangle->v[0].position;
 	float4 e2 = _triangle->v[2].position - _triangle->v[0].position;
@@ -191,22 +202,35 @@ bool triangleIntersect(Ray* _ray, __global Triangle* _triangle)
 	float f = 1.f / a;
 
 	float4 s = _ray->position - _triangle->v[0].position;
-	float u = f * dot(s, q);
-	if(u < 0.f)
+	*u = f * dot(s, q);
+	if(*u < 0.f)
 		return false;
 
 	float4 r = cross(s, e1);
-	float v = f * dot(_ray->direction, r);
-	if(v < 0.f || u + v > 1.f)
+	*v = f * dot(_ray->direction, r);
+	if(*v < 0.f || *u + *v > 1.f)
 		return false;
 
-	float t = f * dot(e2, r);
+	*t = f * dot(e2, r);
 
-	if (t > _ray->distance || t <= 0.f)
+	if (*t > _ray->distance || *t <= 0.f)
 	{
 		return false;
 	}
+	
+	return true;
+}
 
+bool triangleIntersect(Ray* _ray, __global Triangle* _triangle)
+{
+	float t = 0.f;
+	float u = 0.f;
+	float v = 0.f;
+	if (!findTriangleIntersectDistance(_ray, _triangle, &t, &u, &v))
+	{
+		return false;
+	}
+	
 	_ray->distance = t;
 	_ray->diffuseReflectivity = (1.f - u - v) * _triangle->v[0].textureCoord + u * _triangle->v[1].textureCoord + v * _triangle->v[2].textureCoord;
 	_ray->diffuseReflectivity.w = 1.f;
@@ -227,7 +251,34 @@ __kernel void findClosestTriangles(__global Ray* _rays, int numRays, __global Tr
 
 	for (unsigned int i = 0; i < _numTriangles; i++)
 	{
-		triangleIntersect(&r, &_triangles[i]);
+		if(triangleIntersect(&r, &_triangles[i]))
+		{
+			r.collideGroup = 1;
+			r.collideObject = i;
+		}
+		
+	}
+
+	_rays[id] = r;
+}
+
+__kernel void detectShadowWithTriangles(__global Ray* _rays, int numRays, __global Triangle* _triangles, int _numTriangles)
+{
+	int id = get_global_id(0);
+	if (id > numRays)
+		return;
+
+	Ray r = _rays[id];
+
+	float dummy;
+	float dummier;
+	float dummiest;
+	for (unsigned int i = 0; r.inShadow == false && i < _numTriangles; i++)
+	{
+		if (r.collideGroup == 1 && r.collideObject == i)
+			continue;
+
+		r.inShadow = findTriangleIntersectDistance(&r, &_triangles[i], &dummy, &dummier, &dummiest);
 	}
 
 	_rays[id] = r;
