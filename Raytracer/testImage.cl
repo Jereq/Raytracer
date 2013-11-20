@@ -16,14 +16,9 @@ typedef struct Light
 	float4 intensity;
 } Light;
 
-__constant Light l = {
-	{0.f, 0.f, 50.f, 1.f},
-	{0.7f, 0.7f, 0.7f, 0.f}
-};
-
 __constant float4 ambientIntensity = {0.3f, 0.3f, 0.3f, 0.f};
 
-__kernel void testImage(__write_only image2d_t image, __global Ray* _rays)
+__kernel void testImage(__write_only image2d_t image, __global Ray* _rays, __constant Light* _lights, int _lightIdx)
 {
 	int2 pos = {get_global_id(0), get_global_id(1)};
 	Ray r = _rays[pos.x + get_image_width(image) * pos.y];
@@ -33,15 +28,15 @@ __kernel void testImage(__write_only image2d_t image, __global Ray* _rays)
 		return;
 	}
 
-	float4 color = { 0.f, 0.f, 0.f, 1.f };
+	float4 surfaceReflectivity = r.diffuseReflectivity;
+	float4 color = surfaceReflectivity * ambientIntensity;
 
 	if(r.inShadow == false)
 	{
-		float4 intersectPoint = r.position + r.direction * r.distance;
-		float4 lightDir = normalize(l.position - intersectPoint);
+		float4 intersectPoint = r.position;
+		float4 lightDir = normalize(_lights[_lightIdx].position - intersectPoint);
 
-		float4 surfaceReflectivity = r.diffuseReflectivity;
-		color = surfaceReflectivity * (l.intensity * max(dot(lightDir, r.surfaceNormal), 0.f) + ambientIntensity);	
+		color += surfaceReflectivity * (_lights[_lightIdx].intensity * max(dot(lightDir, r.surfaceNormal), 0.f));	
 	}
 	
 	write_imagef(image, pos, (float4)(color.xyz, 1.f));

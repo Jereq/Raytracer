@@ -166,7 +166,7 @@ __kernel void detectShadowWithSpheres(__global Ray* _rays, int numRays, __consta
 	r.direction = relativePos / r.distance;
 
 	float dummy;
-	for (unsigned int i = 0; r.inShadow == falsedww && i < _numSpheres; i++)
+	for (unsigned int i = 0; r.inShadow == false && i < _numSpheres; i++)
 	{
 		if (r.collideGroup == 0 && r.collideObject == i)
 			continue;

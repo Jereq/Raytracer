@@ -1,6 +1,6 @@
 #include "Camera.h"
 #include "GLWindow.h"
-
+#include "MovingLight.h"
 
 #define __CL_ENABLE_EXCEPTIONS
 #define CL_GL_INTEROP
@@ -221,12 +221,15 @@ cl::Kernel compileKernel(cl::Context& _context, std::vector<cl::Device>& _device
 	return cl::Kernel(program, _kernelName.c_str());
 }
 
-void runImageKernel(cl::CommandQueue& _queue, cl::Kernel& _kernel, cl::BufferRenderGL& _renderbuffer, cl::Buffer& _rays, int _width, int _height, std::vector<cl::Event>* _events, cl::Event* _outEvent)
+void runImageKernel(cl::CommandQueue& _queue, cl::Kernel& _kernel, cl::BufferRenderGL& _renderbuffer, cl::Buffer& _rays,
+					cl::Buffer& _lights, int _lightIdx, int _width, int _height, std::vector<cl::Event>* _events, cl::Event* _outEvent)
 {
 	//std::cout << "Setting kernel arguments..." << std::endl;
 
 	_kernel.setArg(0, _renderbuffer);
 	_kernel.setArg(1, _rays);
+	_kernel.setArg(2, _lights);
+	_kernel.setArg(3, _lightIdx);
 
 	//std::cout << "Starting kernel..." << std::endl;
 
@@ -271,12 +274,6 @@ struct Sphere
 	glm::vec4 diffuseReflectivity;
 	float radius;
 	float padding[3];
-};
-
-struct Light
-{
-	glm::vec4 position;
-	glm::vec4 intensity;
 };
 
 glm::vec2 dir;
@@ -478,12 +475,14 @@ int main(int argc, char** argv)
 		findClosestSpheresKernel.setArg(2, spheresBuffer);
 		findClosestSpheresKernel.setArg(3, NUM_SPHERES);
 
-		Light light = { glm::vec4(0.f, 0.f, 50.f, 1.f), glm::vec4(0.7f, 0.7f, 0.7f, 0.f) };
-		
-		std::vector<Light> pointLight;
-		pointLight.push_back(light);
+		std::vector<MovingLight> movLights;
+		for (unsigned int i = 0; i < 1; i++)
+		{
+			movLights.push_back(MovingLight(glm::vec4(0.7f, 0.7f, 0.7f, 0.f),
+				glm::vec4(0.f, 0.f, 10.f, 1.f), glm::vec4(0.f, 0.f, -10.f, 1.f), 1.f));
+		}
 
-		cl::Buffer lightBuffer(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, sizeof(Light) * pointLight.size(), pointLight.data());
+		cl::Buffer lightBuffer(context, CL_MEM_READ_ONLY, sizeof(Light) * movLights.size());
 
 		detectShadowWithSpheres.setArg(0, primaryRaysBuffer);
 		detectShadowWithSpheres.setArg(1, numRays);
@@ -538,6 +537,18 @@ int main(int argc, char** argv)
 			}
 			camera.setRotation(glm::vec3(rotation.y, -rotation.x, 0.f));
 
+			std::vector<Light> pointLights;
+			for (MovingLight& l : movLights)
+			{
+				l.onFrame((float)deltaTime);
+				pointLights.push_back(l.light);
+			}
+
+			std::vector<cl::Event> events;
+
+			cl::Event writeLightsEvent;
+			queue.enqueueWriteBuffer(lightBuffer, false, 0, sizeof(Light) * pointLights.size(), pointLights.data(), &events, &writeLightsEvent);
+
 			window.clearFramebuffer(1.f, 0.f, 0.f);
 			glFinish();
 
@@ -545,8 +556,6 @@ int main(int argc, char** argv)
 
 			primaryRaysKernel.setArg(1, glm::transpose(camera.getInvViewProjectionMatrix()));
 			primaryRaysKernel.setArg(2, glm::vec4(camera.getPosition(), 1.f));
-
-			std::vector<cl::Event> events;
 
 			cl::Event primEvent = runKernel(queue, primaryRaysKernel, global, local, events);
 			cl::Event interEvent = runKernel(queue, findClosestSpheresKernel, cl::NDRange(numRays), cl::NDRange(32), events);
@@ -560,7 +569,7 @@ int main(int argc, char** argv)
 
 			// Render
 			cl::Event imageEvent;
-			runImageKernel(queue, kernel, renderbuffer, primaryRaysBuffer, imageWidth, imageHeight, &events, &imageEvent);
+			runImageKernel(queue, kernel, renderbuffer, primaryRaysBuffer, lightBuffer, 0, imageWidth, imageHeight, &events, &imageEvent);
 
 			events.push_back(imageEvent);
 
@@ -575,6 +584,7 @@ int main(int argc, char** argv)
 			window.drawFramebuffer();
 			auto drawEnd = std::chrono::high_resolution_clock::now();
 
+			incTime("Write lights", getExecutionTime(writeLightsEvent));
 			incTime("Primary rays", getExecutionTime(primEvent));
 			incTime("Intersection Spheres", getExecutionTime(interEvent));
 			incTime("Intersection Triangles", getExecutionTime(triangleEvent));

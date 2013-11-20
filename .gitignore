@@ -42,3 +42,5 @@ ipch/
 *.psess
 *.vsp
 *.vspx
+
+testCaseCollection.xml
