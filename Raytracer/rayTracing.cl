@@ -12,6 +12,7 @@ typedef struct Ray
 	float4 direction;
 	float4 diffuseReflectivity;
 	float4 surfaceNormal;
+	float4 reflectDir;
 	float distance;
 	int inShadow;
 	int collideGroup;
@@ -141,6 +142,9 @@ __kernel void findClosestSpheres(__global Ray* _rays, int numRays, __constant Sp
 
 	for (unsigned int i = 0; i < _numSpheres; i++)
 	{
+		if (r.collideGroup == 0 && r.collideObject == i)
+			continue;
+
 		if (sphereIntersect(&r, &_spheres[i]))
 		{
 			r.collideGroup = 0;
@@ -172,6 +176,20 @@ __kernel void detectShadowWithSpheres(__global Ray* _rays, int _numRays, __const
 	_rays[id] = r;
 }
 
+__kernel void moveRaysToIntersection(__global Ray* _rays, int _numRays)
+{
+	int id = get_global_id(0);
+	if (id > _numRays)
+		return;
+
+	Ray r = _rays[id];
+
+	r.position += r.direction * r.distance + r.surfaceNormal * 0.001f;
+	r.reflectDir = r.direction - 2 * dot(r.direction, r.surfaceNormal) * r.surfaceNormal;
+
+	_rays[id] = r;
+}
+
 __kernel void updateRaysToLight(__global Ray* _rays, int _numRays, __constant Light* _lights, int _lightIdx)
 {
 	int id = get_global_id(0);
@@ -180,10 +198,9 @@ __kernel void updateRaysToLight(__global Ray* _rays, int _numRays, __constant Li
 
 	Ray r = _rays[id];
 
-	r.position += r.direction * r.distance;
-	float4 relativePos = _lights[_lightIdx].position - r.position;
-	r.distance = length(relativePos);
-	r.direction = relativePos / r.distance;
+	float4 relativeLightPos = _lights[_lightIdx].position - r.position;
+	r.distance = length(relativeLightPos);
+	r.direction = relativeLightPos / r.distance;
 
 	_rays[id] = r;
 }
@@ -251,6 +268,9 @@ __kernel void findClosestTriangles(__global Ray* _rays, int numRays, __global Tr
 
 	for (unsigned int i = 0; i < _numTriangles; i++)
 	{
+		if (r.collideGroup == 1 && r.collideObject == i)
+			continue;
+
 		if(triangleIntersect(&r, &_triangles[i]))
 		{
 			r.collideGroup = 1;

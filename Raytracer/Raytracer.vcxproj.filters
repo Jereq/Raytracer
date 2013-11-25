@@ -53,13 +53,10 @@
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <None Include="vector_add_gpu.cl">
-      <Filter>Kernel Files</Filter>
-    </None>
-    <None Include="testImage.cl">
-      <Filter>Kernel Files</Filter>
-    </None>
     <None Include="rayTracing.cl">
+      <Filter>Kernel Files</Filter>
+    </None>
+    <None Include="writeImage.cl">
       <Filter>Kernel Files</Filter>
     </None>
   </ItemGroup>

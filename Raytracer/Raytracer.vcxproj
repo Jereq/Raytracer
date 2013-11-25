@@ -90,8 +90,7 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="rayTracing.cl" />
-    <None Include="testImage.cl" />
-    <None Include="vector_add_gpu.cl" />
+    <None Include="writeImage.cl" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
