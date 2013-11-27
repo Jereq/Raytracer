@@ -26,7 +26,7 @@ __kernel void accumulateImage(__global float4* _accumulationBuffer, __global Ray
 	
 	if (r.distance == INFINITY)
 	{
-		_accumulationBuffer[id] += (float4)(0.f, 1.f, 0.f, 0.f);
+		_accumulationBuffer[id] += (float4)(0.f, 0.2f, 0.f, 0.f);
 	}
 	else
 	{
@@ -47,6 +47,9 @@ __kernel void accumulateImage(__global float4* _accumulationBuffer, __global Ray
 	r.direction = r.reflectDir;
 	r.distance = INFINITY;
 	r.inShadow = false;
+	r.diffuseReflectivity = (float4)(0.f, 0.f, 0.f, 1.f);
+
+	_rays[id] = r;
 }
 
 __kernel void dumpImage(__global float4* _accumulationBuffer, __global Ray* _rays, __write_only image2d_t _image)
