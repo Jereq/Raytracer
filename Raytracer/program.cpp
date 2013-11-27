@@ -274,7 +274,7 @@ glm::vec2 rotation;
 
 const static unsigned int MAX_LIGHTS = 10;
 unsigned int numLights = 1;
-unsigned int numBounces = 0;
+unsigned int numBounces = 1;
 
 void keyCallback(GLFWwindow* _window, int _key, int _scanCode, int _action, int _mod)
 {
@@ -305,24 +305,36 @@ void keyCallback(GLFWwindow* _window, int _key, int _scanCode, int _action, int 
 		break;
 
 	case GLFW_KEY_EQUAL:
-		numLights++;
-		if (numLights > MAX_LIGHTS)
-			numLights = MAX_LIGHTS;
+		if (_action == GLFW_PRESS)
+		{
+			numLights++;
+			if (numLights > MAX_LIGHTS)
+				numLights = MAX_LIGHTS;
+		}
 		break;
 
 	case GLFW_KEY_MINUS:
-		numLights--;
-		if (numLights < 1)
-			numLights = 1;
+		if (_action == GLFW_PRESS)
+		{
+			numLights--;
+			if (numLights < 1)
+				numLights = 1;
+		}
 		break;
 
 	case GLFW_KEY_Q:
-		numBounces++;
+		if (_action == GLFW_PRESS)
+		{
+			numBounces++;
+		}
 		break;
 
 	case GLFW_KEY_E:
-		if (numBounces > 0)
-			numBounces--;
+		if (_action == GLFW_PRESS)
+		{
+			if (numBounces > 1)
+				numBounces--;
+		}
 		break;
 	}
 }
@@ -459,7 +471,6 @@ int main(int argc, char** argv)
 		window.createFramebuffer(width, height);
 
 		cl::Program colorProgram = createProgramFromFile(context, devices, "writeImage.cl");
-		cl::Kernel initialColorKernel(colorProgram, "writeImage");
 		cl::Kernel accumulateColorKernel(colorProgram, "accumulateImage");
 		cl::Kernel dumpImageKernel(colorProgram, "dumpImage");
 
@@ -482,16 +493,18 @@ int main(int argc, char** argv)
 
 		Camera camera(45.f, (float)width / (float)height);
 		camera.setViewDirection(glm::vec3(0.f, 0.f, -1.f));
-		camera.setPosition(glm::vec3(0.f, 0.f, 0.f));
+		camera.setPosition(glm::vec3(0.f, 1.f, -2.f));
 
 		int numRays = width * height;
 		cl::Buffer primaryRaysBuffer(context, CL_MEM_READ_WRITE, numRays * sizeof(Ray));
+		cl::Buffer accumulationBuffer(context, CL_MEM_READ_WRITE, sizeof(cl_float4) * numRays);
 
 		primaryRaysKernel.setArg(0, primaryRaysBuffer);
 		primaryRaysKernel.setArg(1, glm::transpose(camera.getInvViewProjectionMatrix()));
 		primaryRaysKernel.setArg(2, glm::vec4(camera.getPosition(), 1.f));
 		primaryRaysKernel.setArg(3, width);
 		primaryRaysKernel.setArg(4, height);
+		primaryRaysKernel.setArg(5, accumulationBuffer);
 
 		std::vector<Sphere> spheres(NUM_SPHERES);
 		for (Sphere& s : spheres)
@@ -512,7 +525,7 @@ int main(int argc, char** argv)
 		for (unsigned int i = 0; i < MAX_LIGHTS; i++)
 		{
 			movLights.push_back(MovingLight(glm::vec4(0.7f, 0.7f, 0.7f, 0.f),
-				glm::vec4(0.f, i, 10.f, 1.f), glm::vec4(0.f, i, -10.f, 1.f), 1.f / (i + 1)));
+				glm::vec4(i, 0.f, 10.f, 1.f), glm::vec4(i, 0.f, -10.f, 1.f), 1.f / (i + 1)));
 		}
 
 		cl::Buffer lightBuffer(context, CL_MEM_READ_ONLY, sizeof(Light) * movLights.size());
@@ -554,8 +567,6 @@ int main(int argc, char** argv)
 		detectShadowWithTriangles.setArg(2, objModel.getBuffer());
 		detectShadowWithTriangles.setArg(3, objModel.GetVertexCount() / 3);
 
-		cl::Buffer accumulationBuffer(context, CL_MEM_READ_WRITE, sizeof(cl_float4) * numRays);
-
 		dumpImageKernel.setArg(0, accumulationBuffer);
 		dumpImageKernel.setArg(1, primaryRaysBuffer);
 		dumpImageKernel.setArg(2, renderbuffer);
@@ -564,12 +575,6 @@ int main(int argc, char** argv)
 		size_t global_wsx = ((width + local_ws - 1) / local_ws) * local_ws;
 		size_t global_wsy = ((height + local_ws - 1) / local_ws) * local_ws;
 		
-		initialColorKernel.setArg(0, accumulationBuffer);
-		initialColorKernel.setArg(1, primaryRaysBuffer);
-		initialColorKernel.setArg(2, numRays);
-		initialColorKernel.setArg(3, lightBuffer);
-		initialColorKernel.setArg(4, 0);
-
 		accumulateColorKernel.setArg(0, accumulationBuffer);
 		accumulateColorKernel.setArg(1, primaryRaysBuffer);
 		accumulateColorKernel.setArg(2, numRays);
@@ -609,10 +614,17 @@ int main(int argc, char** argv)
 				pointLights.push_back(l.light);
 			}
 
+			for (unsigned int i = 0; i < numLights; i++)
+			{
+				spheres[i].position = pointLights[i].position;
+				spheres[i].radius = 0.1f;
+			}
+
 			std::vector<cl::Event> events;
 
-			cl::Event writeLightsEvent;
+			cl::Event writeLightsEvent, writeSpheresEvent;
 			queue.enqueueWriteBuffer(lightBuffer, false, 0, sizeof(Light) * pointLights.size(), pointLights.data(), &events, &writeLightsEvent);
+			queue.enqueueWriteBuffer(spheresBuffer, false, 0, sizeof(Sphere) * numLights, spheres.data(), &events, &writeSpheresEvent);
 
 			window.clearFramebuffer(1.f, 0.f, 0.f);
 			glFinish();
@@ -631,37 +643,16 @@ int main(int argc, char** argv)
 			std::vector<cl::Event> moveRaysEvents;
 
 			cl::Event primEvent = runKernel(queue, primaryRaysKernel, global, local, events);
-			
-			intersectSpheresEvents.push_back(runKernel(queue, findClosestSpheresKernel, cl::NDRange(numRays), cl::NDRange(32), events));
-			triangleEvents.push_back(runKernel(queue, findClosestTrianglesKernel, cl::NDRange(numRays), cl::NDRange(32), events));
-			moveRaysEvents.push_back(runKernel(queue, moveRaysToIntersectionKernel, cl::NDRange(numRays), cl::NDRange(32), events));
-			updateRaysToLights.push_back(runKernel(queue, updateRaysToLightKernel, cl::NDRange(numRays), cl::NDRange(32), events));
-			sphereShadowEvents.push_back(runKernel(queue, detectShadowWithSpheres, cl::NDRange(numRays), cl::NDRange(32), events));
-			triangleShadowEvents.push_back(runKernel(queue, detectShadowWithTriangles, cl::NDRange(numRays), cl::NDRange(32), events));
-
-			// Render
-			cl::Event imageEvent = runKernel(queue, initialColorKernel, cl::NDRange(numRays), cl::NDRange(32), events);
-
-			for (unsigned int i = 1; i < numLights; i++)
-			{
-				updateRaysToLightKernel.setArg(3, i);
-				updateRaysToLights.push_back(runKernel(queue, updateRaysToLightKernel, cl::NDRange(numRays), cl::NDRange(32), events));
-				sphereShadowEvents.push_back(runKernel(queue, detectShadowWithSpheres, cl::NDRange(numRays), cl::NDRange(32), events));
-				triangleShadowEvents.push_back(runKernel(queue, detectShadowWithTriangles, cl::NDRange(numRays), cl::NDRange(32), events));
-
-				accumulateColorKernel.setArg(4, i);
-				accumulateColorEvents.push_back(runKernel(queue, accumulateColorKernel, cl::NDRange(numRays), cl::NDRange(32), events));
-			}
 
 			for (unsigned int j = 0; j < numBounces; j++)
 			{
 				intersectSpheresEvents.push_back(runKernel(queue, findClosestSpheresKernel, cl::NDRange(numRays), cl::NDRange(32), events));
 				triangleEvents.push_back(runKernel(queue, findClosestTrianglesKernel, cl::NDRange(numRays), cl::NDRange(32), events));
+				moveRaysEvents.push_back(runKernel(queue, moveRaysToIntersectionKernel, cl::NDRange(numRays), cl::NDRange(32), events));
 
 				for (unsigned int i = 0; i < numLights; i++)
 				{
 					updateRaysToLightKernel.setArg(3, i);
-					moveRaysEvents.push_back(runKernel(queue, moveRaysToIntersectionKernel, cl::NDRange(numRays), cl::NDRange(32), events));
 					updateRaysToLights.push_back(runKernel(queue, updateRaysToLightKernel, cl::NDRange(numRays), cl::NDRange(32), events));
 					sphereShadowEvents.push_back(runKernel(queue, detectShadowWithSpheres, cl::NDRange(numRays), cl::NDRange(32), events));
 					triangleShadowEvents.push_back(runKernel(queue, detectShadowWithTriangles, cl::NDRange(numRays), cl::NDRange(32), events));
@@ -688,10 +679,10 @@ int main(int argc, char** argv)
 			auto drawEnd = std::chrono::high_resolution_clock::now();
 
 			incTime("Write lights", getExecutionTime(writeLightsEvent));
+			incTime("Write spheres", getExecutionTime(writeLightsEvent));
 			incTime("Primary rays", getExecutionTime(primEvent));
 			incTime("Intersection Spheres", intersectSpheresEvents);
 			incTime("Intersection Triangles", triangleEvents);
-			incTime("Shading pass", getExecutionTime(imageEvent));
 			incTime("Aquire objects", getExecutionTime(aqEvent));
 			incTime("Release objects", getExecutionTime(relEvent));
 			incTime("Move rays", moveRaysEvents);

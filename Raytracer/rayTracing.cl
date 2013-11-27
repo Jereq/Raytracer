@@ -63,11 +63,12 @@ float4 matmul(const mat4* _mat, const float4* _vec)
 	return res;
 }
 
-__kernel void primaryRays(__global Ray* _res, const mat4 _invMat, const float4 _camPos, const int _width, const int _height)
+__kernel void primaryRays(__global Ray* _res, const mat4 _invMat, const float4 _camPos, const int _width, const int _height, __global float4* _accumulationBuffer)
 {
 	int2 pos = {get_global_id(0), get_global_id(1)};
+	int id = pos.x + _width * pos.y;
 
-	if (pos.x > _width || pos.y > _height)
+	if (pos.x >= _width || pos.y >= _height)
 	{
 		return;
 	}
@@ -75,12 +76,18 @@ __kernel void primaryRays(__global Ray* _res, const mat4 _invMat, const float4 _
 	float4 fpos = {((float)pos.x + 0.5f) * 2.f / (float)_width - 1.f, ((float)pos.y + 0.5f) * 2.f / (float)_height - 1.f, -1.f, 1.f};
 	float4 worldPos = matmul(&_invMat, &fpos);
 	worldPos *= (1.f / worldPos.w);
-	_res[pos.x + _width * pos.y].position = _camPos;
-	_res[pos.x + _width * pos.y].direction = normalize(worldPos - _camPos);
-	_res[pos.x + _width * pos.y].distance = INFINITY;
-	_res[pos.x + _width * pos.y].inShadow = false;
-	_res[pos.x + _width * pos.y].collideGroup = -1;
-	_res[pos.x + _width * pos.y].collideGroup = -1;
+	float4 direction = normalize(worldPos - _camPos);
+	_res[id].position = _camPos;
+	_res[id].direction = direction;
+	_res[id].diffuseReflectivity = (float4)(0.f, 0.f, 0.f, 1.f);
+	_res[id].surfaceNormal = (float4)(0.f, 0.f, 0.f, 0.f);
+	_res[id].reflectDir = direction;
+	_res[id].distance = INFINITY;
+	_res[id].inShadow = false;
+	_res[id].collideGroup = -1;
+	_res[id].collideGroup = -1;
+
+	_accumulationBuffer[id] = (float4)(0.f, 0.f, 0.f, 0.f);
 }
 
 // http://www.scratchapixel.com/lessons/3d-basic-lessons/lesson-7-intersecting-simple-shapes/ray-sphere-intersection/
@@ -89,6 +96,7 @@ bool findSphereIntersectDistance(Ray* _ray, __constant Sphere* _sphere, float* t
 {
 	float4 rDistance = _sphere->position - _ray->position;
 	float rayDist = dot(rDistance, _ray->direction);
+
 	float rDist2 = dot(rDistance, rDistance);
 	float radius2 = _sphere->radius * _sphere->radius;
 
@@ -135,7 +143,7 @@ bool sphereIntersect(Ray* _ray, __constant Sphere* _sphere)
 __kernel void findClosestSpheres(__global Ray* _rays, int numRays, __constant Sphere* _spheres, int _numSpheres)
 {
 	int id = get_global_id(0);
-	if (id > numRays)
+	if (id >= numRays)
 		return;
 
 	Ray r = _rays[id];
@@ -159,7 +167,7 @@ __kernel void findClosestSpheres(__global Ray* _rays, int numRays, __constant Sp
 __kernel void detectShadowWithSpheres(__global Ray* _rays, int _numRays, __constant Sphere* _spheres, int _numSpheres)
 {
 	int id = get_global_id(0);
-	if (id > _numRays)
+	if (id >= _numRays)
 		return;
 
 	Ray r = _rays[id];
@@ -171,6 +179,8 @@ __kernel void detectShadowWithSpheres(__global Ray* _rays, int _numRays, __const
 			continue;
 
 		r.inShadow = findSphereIntersectDistance(&r, &_spheres[i], &dummy);
+		if (r.distance - dummy < 0.11f)
+			r.inShadow = false;
 	}
 
 	_rays[id] = r;
@@ -179,12 +189,12 @@ __kernel void detectShadowWithSpheres(__global Ray* _rays, int _numRays, __const
 __kernel void moveRaysToIntersection(__global Ray* _rays, int _numRays)
 {
 	int id = get_global_id(0);
-	if (id > _numRays)
+	if (id >= _numRays)
 		return;
 
 	Ray r = _rays[id];
 
-	r.position += r.direction * r.distance + r.surfaceNormal * 0.001f;
+	r.position += r.direction * r.distance;
 	r.reflectDir = r.direction - 2 * dot(r.direction, r.surfaceNormal) * r.surfaceNormal;
 
 	_rays[id] = r;
@@ -193,7 +203,7 @@ __kernel void moveRaysToIntersection(__global Ray* _rays, int _numRays)
 __kernel void updateRaysToLight(__global Ray* _rays, int _numRays, __constant Light* _lights, int _lightIdx)
 {
 	int id = get_global_id(0);
-	if (id > _numRays)
+	if (id >= _numRays)
 		return;
 
 	Ray r = _rays[id];
@@ -201,6 +211,7 @@ __kernel void updateRaysToLight(__global Ray* _rays, int _numRays, __constant Li
 	float4 relativeLightPos = _lights[_lightIdx].position - r.position;
 	r.distance = length(relativeLightPos);
 	r.direction = relativeLightPos / r.distance;
+	r.inShadow = false;
 
 	_rays[id] = r;
 }
@@ -261,7 +272,7 @@ bool triangleIntersect(Ray* _ray, __global Triangle* _triangle)
 __kernel void findClosestTriangles(__global Ray* _rays, int numRays, __global Triangle* _triangles, int _numTriangles)
 {
 	int id = get_global_id(0);
-	if (id > numRays)
+	if (id >= numRays)
 		return;
 
 	Ray r = _rays[id];
@@ -285,7 +296,7 @@ __kernel void findClosestTriangles(__global Ray* _rays, int numRays, __global Tr
 __kernel void detectShadowWithTriangles(__global Ray* _rays, int numRays, __global Triangle* _triangles, int _numTriangles)
 {
 	int id = get_global_id(0);
-	if (id > numRays)
+	if (id >= numRays)
 		return;
 
 	Ray r = _rays[id];
