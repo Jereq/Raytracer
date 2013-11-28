@@ -553,7 +553,7 @@ int main(int argc, char** argv)
 		std::vector<MovingLight> movLights;
 		for (unsigned int i = 0; i < MAX_LIGHTS; i++)
 		{
-			movLights.push_back(MovingLight(glm::vec4(0.7f, 0.7f, 0.7f, 0.f),
+			movLights.push_back(MovingLight(glm::vec4(20.f, 20.f, 20.f, 0.f),
 				glm::vec4(i, 0.f, 10.f, 1.f), glm::vec4(i, 0.f, -10.f, 1.f), 1.f / (i + 1)));
 		}
 

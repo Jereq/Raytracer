@@ -38,9 +38,23 @@ __kernel void accumulateImage(__global float4* _accumulationBuffer, __global Ray
 		if(r.inShadow == false)
 		{
 			float4 intersectPoint = r.position;
-			float4 lightDir = normalize(_lights[_lightIdx].position - intersectPoint);
+			float4 relativePos = _lights[_lightIdx].position - intersectPoint;
+			float4 lightDir = normalize(relativePos);
+			float distanceSq = dot(relativePos, relativePos);
 
-			color += surfaceReflectivity * (_lights[_lightIdx].intensity * max(dot(lightDir, r.surfaceNormal), 0.f));	
+			float NdotL = dot(r.surfaceNormal, lightDir);
+			float intensity = clamp(NdotL, 0.f, 1.f);
+
+			float4 diffuseLight = intensity * _lights[_lightIdx].intensity / distanceSq;
+
+			float4 halfway = normalize(lightDir + r.reflectDir);
+
+			float NdotH = dot(r.surfaceNormal, halfway);
+			intensity = pow(clamp(NdotH, 0.f, 1.f), 400.f);
+
+			float4 specularLight = intensity * _lights[_lightIdx].intensity * 10.f / distanceSq;
+
+			color += surfaceReflectivity * (diffuseLight + specularLight);
 		}
 	
 		_accumulationBuffer[id] += r.strength * (float4)(color.xyz, 0.f);
