@@ -6,6 +6,8 @@ typedef struct Ray
 	float4 surfaceNormal;
 	float4 reflectDir;
 	float distance;
+	float strength;
+	float totalStrength;
 	int inShadow;
 	int collideGroup;
 	int collideObject;
@@ -26,7 +28,7 @@ __kernel void accumulateImage(__global float4* _accumulationBuffer, __global Ray
 	
 	if (r.distance == INFINITY)
 	{
-		_accumulationBuffer[id] += (float4)(0.f, 0.2f, 0.f, 0.f);
+		_accumulationBuffer[id] += r.strength * (float4)(0.f, 0.2f, 0.f, 0.f);
 	}
 	else
 	{
@@ -41,13 +43,11 @@ __kernel void accumulateImage(__global float4* _accumulationBuffer, __global Ray
 			color += surfaceReflectivity * (_lights[_lightIdx].intensity * max(dot(lightDir, r.surfaceNormal), 0.f));	
 		}
 	
-		_accumulationBuffer[id] += (float4)(color.xyz, 0.f);
+		_accumulationBuffer[id] += r.strength * (float4)(color.xyz, 0.f);
 	}
 
 	r.direction = r.reflectDir;
 	r.distance = INFINITY;
-	r.inShadow = false;
-	r.diffuseReflectivity = (float4)(0.f, 0.f, 0.f, 1.f);
 
 	_rays[id] = r;
 }

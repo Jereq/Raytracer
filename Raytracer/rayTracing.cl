@@ -14,6 +14,8 @@ typedef struct Ray
 	float4 surfaceNormal;
 	float4 reflectDir;
 	float distance;
+	float strength;
+	float totalStrength;
 	int inShadow;
 	int collideGroup;
 	int collideObject;
@@ -24,6 +26,7 @@ typedef struct Sphere
 	float4 position;
 	float4 diffuseReflectivity;
 	float radius;
+	float reflectFraction;
 } Sphere;
 
 typedef struct Vertex
@@ -83,6 +86,8 @@ __kernel void primaryRays(__global Ray* _res, const mat4 _invMat, const float4 _
 	_res[id].surfaceNormal = (float4)(0.f, 0.f, 0.f, 0.f);
 	_res[id].reflectDir = direction;
 	_res[id].distance = INFINITY;
+	_res[id].strength = 0.f;
+	_res[id].totalStrength = 1.f;
 	_res[id].inShadow = false;
 	_res[id].collideGroup = -1;
 	_res[id].collideGroup = -1;
@@ -132,7 +137,8 @@ bool sphereIntersect(Ray* _ray, __constant Sphere* _sphere)
 	}
 	
 	_ray->distance = t;
-	_ray->diffuseReflectivity = _sphere->diffuseReflectivity;
+	_ray->diffuseReflectivity = _sphere->diffuseReflectivity * (1.f - _sphere->reflectFraction);
+	_ray->strength = _sphere->reflectFraction;
 
 	float4 intersectPoint = _ray->position + _ray->direction * t;
 	_ray->surfaceNormal = normalize(intersectPoint - _sphere->position);
@@ -194,8 +200,12 @@ __kernel void moveRaysToIntersection(__global Ray* _rays, int _numRays)
 
 	Ray r = _rays[id];
 
-	r.position += r.direction * r.distance;
+	r.position += r.direction * r.distance + r.surfaceNormal * 0.001f;
 	r.reflectDir = r.direction - 2 * dot(r.direction, r.surfaceNormal) * r.surfaceNormal;
+
+	float currentStrength = r.totalStrength;
+	r.totalStrength *= r.strength;
+	r.strength = currentStrength;
 
 	_rays[id] = r;
 }
@@ -249,7 +259,7 @@ bool findTriangleIntersectDistance(Ray* _ray, __global Triangle* _triangle, floa
 	return true;
 }
 
-bool triangleIntersect(Ray* _ray, __global Triangle* _triangle)
+bool triangleIntersect(Ray* _ray, __global Triangle* _triangle, float _reflectFraction)
 {
 	float t = 0.f;
 	float u = 0.f;
@@ -260,8 +270,9 @@ bool triangleIntersect(Ray* _ray, __global Triangle* _triangle)
 	}
 	
 	_ray->distance = t;
-	_ray->diffuseReflectivity = (1.f - u - v) * _triangle->v[0].textureCoord + u * _triangle->v[1].textureCoord + v * _triangle->v[2].textureCoord;
+	_ray->diffuseReflectivity = (1.f - _reflectFraction) * ((1.f - u - v) * _triangle->v[0].textureCoord + u * _triangle->v[1].textureCoord + v * _triangle->v[2].textureCoord);
 	_ray->diffuseReflectivity.w = 1.f;
+	_ray->strength = _reflectFraction;
 
 	float4 intersectPoint = _ray->position + _ray->direction * t;
 	_ray->surfaceNormal = (1.f - u - v) * _triangle->v[0].normal + u * _triangle->v[1].normal + v * _triangle->v[2].normal;
@@ -269,7 +280,7 @@ bool triangleIntersect(Ray* _ray, __global Triangle* _triangle)
 	return true;
 }
 
-__kernel void findClosestTriangles(__global Ray* _rays, int numRays, __global Triangle* _triangles, int _numTriangles)
+__kernel void findClosestTriangles(__global Ray* _rays, int numRays, __global Triangle* _triangles, int _numTriangles, float _reflectFraction)
 {
 	int id = get_global_id(0);
 	if (id >= numRays)
@@ -282,7 +293,7 @@ __kernel void findClosestTriangles(__global Ray* _rays, int numRays, __global Tr
 		if (r.collideGroup == 1 && r.collideObject == i)
 			continue;
 
-		if(triangleIntersect(&r, &_triangles[i]))
+		if(triangleIntersect(&r, &_triangles[i], _reflectFraction))
 		{
 			r.collideGroup = 1;
 			r.collideObject = i;

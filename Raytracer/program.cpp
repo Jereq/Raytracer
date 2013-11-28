@@ -255,9 +255,12 @@ struct Ray
 	glm::vec4 surfaceNormal;
 	glm::vec4 reflectDir;
 	float distance;
+	float strength;
+	float totalStrength;
 	int inShadow;
 	int collideGroup;
 	int collideObject;
+	float padding[2];
 };
 
 struct Sphere
@@ -265,7 +268,8 @@ struct Sphere
 	glm::vec4 position;
 	glm::vec4 diffuseReflectivity;
 	float radius;
-	float padding[3];
+	float reflectFraction;
+	float padding[2];
 };
 
 glm::vec2 dir;
@@ -275,6 +279,8 @@ glm::vec2 rotation;
 const static unsigned int MAX_LIGHTS = 10;
 unsigned int numLights = 1;
 unsigned int numBounces = 1;
+float cubeReflect = 0.5f;
+float cubeReflectStep = 0.1f;
 
 void keyCallback(GLFWwindow* _window, int _key, int _scanCode, int _action, int _mod)
 {
@@ -304,7 +310,7 @@ void keyCallback(GLFWwindow* _window, int _key, int _scanCode, int _action, int 
 		dir.y += forward;
 		break;
 
-	case GLFW_KEY_EQUAL:
+	case GLFW_KEY_R:
 		if (_action == GLFW_PRESS)
 		{
 			numLights++;
@@ -313,7 +319,7 @@ void keyCallback(GLFWwindow* _window, int _key, int _scanCode, int _action, int 
 		}
 		break;
 
-	case GLFW_KEY_MINUS:
+	case GLFW_KEY_F:
 		if (_action == GLFW_PRESS)
 		{
 			numLights--;
@@ -322,18 +328,40 @@ void keyCallback(GLFWwindow* _window, int _key, int _scanCode, int _action, int 
 		}
 		break;
 
-	case GLFW_KEY_Q:
+	case GLFW_KEY_T:
 		if (_action == GLFW_PRESS)
 		{
 			numBounces++;
 		}
 		break;
 
-	case GLFW_KEY_E:
+	case GLFW_KEY_G:
 		if (_action == GLFW_PRESS)
 		{
 			if (numBounces > 1)
 				numBounces--;
+		}
+		break;
+
+	case GLFW_KEY_Y:
+		if (_action == GLFW_PRESS)
+		{
+			cubeReflect += cubeReflectStep;
+			if (cubeReflect > 1.f)
+			{
+				cubeReflect = 1.f;
+			}
+		}
+		break;
+
+	case GLFW_KEY_H:
+		if (_action == GLFW_PRESS)
+		{
+			cubeReflect -= cubeReflectStep;
+			if (cubeReflect < 0.f)
+			{
+				cubeReflect = 0.f;
+			}
 		}
 		break;
 	}
@@ -512,6 +540,7 @@ int main(int argc, char** argv)
 			s.position = glm::vec4(glm::ballRand(glm::pow((float)NUM_SPHERES, 1.f/3.f) * 3.f), 1.f);
 			s.diffuseReflectivity = glm::vec4(glm::abs(glm::sphericalRand(0.5f)), 1.f);
 			s.radius = glm::linearRand(0.1f, 2.f);
+			s.reflectFraction = glm::linearRand(0.5f, 0.7f);
 		}
 
 		cl::Buffer spheresBuffer(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, sizeof(Sphere) * NUM_SPHERES, spheres.data());
@@ -606,6 +635,8 @@ int main(int argc, char** argv)
 				camera.setPosition(camera.getPosition() + glm::vec3(rotY * glm::vec4(velocity.x, 0.f, velocity.y, 0.f)));
 			}
 			camera.setRotation(glm::vec3(rotation.y, -rotation.x, 0.f));
+			
+			findClosestTrianglesKernel.setArg(4, cubeReflect);
 
 			std::vector<Light> pointLights;
 			for (MovingLight& l : movLights)
