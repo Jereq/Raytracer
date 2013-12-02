@@ -6,6 +6,7 @@ typedef struct Ray
 	float4 surfaceNormal;
 	float4 reflectDir;
 	float distance;
+	float shininess;
 	float strength;
 	float totalStrength;
 	int inShadow;
@@ -47,12 +48,12 @@ __kernel void accumulateImage(__global float4* _accumulationBuffer, __global Ray
 
 			float4 diffuseLight = intensity * _lights[_lightIdx].intensity / distanceSq;
 
-			float4 halfway = normalize(lightDir + r.reflectDir);
+			float4 halfway = normalize(lightDir - (r.reflectDir - 2 * dot(r.reflectDir, r.surfaceNormal) * r.surfaceNormal));
 
 			float NdotH = dot(r.surfaceNormal, halfway);
-			intensity = pow(clamp(NdotH, 0.f, 1.f), 400.f);
+			intensity = pow(clamp(NdotH, 0.f, 1.f), r.shininess);
 
-			float4 specularLight = intensity * _lights[_lightIdx].intensity * 10.f / distanceSq;
+			float4 specularLight = intensity * _lights[_lightIdx].intensity / distanceSq;
 
 			color += surfaceReflectivity * (diffuseLight + specularLight);
 		}

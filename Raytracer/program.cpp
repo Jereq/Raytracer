@@ -255,12 +255,13 @@ struct Ray
 	glm::vec4 surfaceNormal;
 	glm::vec4 reflectDir;
 	float distance;
+	float shininess;
 	float strength;
 	float totalStrength;
 	int inShadow;
 	int collideGroup;
 	int collideObject;
-	float padding[2];
+	float padding[1];
 };
 
 struct Sphere

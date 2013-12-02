@@ -14,6 +14,7 @@ typedef struct Ray
 	float4 surfaceNormal;
 	float4 reflectDir;
 	float distance;
+	float shininess;
 	float strength;
 	float totalStrength;
 	int inShadow;
@@ -86,6 +87,7 @@ __kernel void primaryRays(__global Ray* _res, const mat4 _invMat, const float4 _
 	_res[id].surfaceNormal = (float4)(0.f, 0.f, 0.f, 0.f);
 	_res[id].reflectDir = direction;
 	_res[id].distance = INFINITY;
+	_res[id].shininess = 0.f;
 	_res[id].strength = 0.f;
 	_res[id].totalStrength = 1.f;
 	_res[id].inShadow = false;
@@ -139,6 +141,7 @@ bool sphereIntersect(Ray* _ray, __constant Sphere* _sphere)
 	_ray->distance = t;
 	_ray->diffuseReflectivity = _sphere->diffuseReflectivity * (1.f - _sphere->reflectFraction);
 	_ray->strength = _sphere->reflectFraction;
+	_ray->shininess = _sphere->reflectFraction * 400.f;
 
 	float4 intersectPoint = _ray->position + _ray->direction * t;
 	_ray->surfaceNormal = normalize(intersectPoint - _sphere->position);
@@ -273,6 +276,7 @@ bool triangleIntersect(Ray* _ray, __global Triangle* _triangle, float _reflectFr
 	_ray->diffuseReflectivity = (1.f - _reflectFraction) * ((1.f - u - v) * _triangle->v[0].textureCoord + u * _triangle->v[1].textureCoord + v * _triangle->v[2].textureCoord);
 	_ray->diffuseReflectivity.w = 1.f;
 	_ray->strength = _reflectFraction;
+	_ray->shininess = _reflectFraction * 400.f;
 
 	float4 intersectPoint = _ray->position + _ray->direction * t;
 	_ray->surfaceNormal = (1.f - u - v) * _triangle->v[0].normal + u * _triangle->v[1].normal + v * _triangle->v[2].normal;
