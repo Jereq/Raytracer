@@ -262,7 +262,7 @@ bool findTriangleIntersectDistance(Ray* _ray, __global Triangle* _triangle, floa
 	return true;
 }
 
-bool triangleIntersect(Ray* _ray, __global Triangle* _triangle, float _reflectFraction)
+bool triangleIntersect(Ray* _ray, __global Triangle* _triangle, float _reflectFraction, image2d_t _diffuseTex)
 {
 	float t = 0.f;
 	float u = 0.f;
@@ -272,8 +272,12 @@ bool triangleIntersect(Ray* _ray, __global Triangle* _triangle, float _reflectFr
 		return false;
 	}
 	
+	float2 texCoord = ((1.f - u - v) * _triangle->v[0].textureCoord.xy + u * _triangle->v[1].textureCoord.xy + v * _triangle->v[2].textureCoord.xy);
+
+	const sampler_t diffSampler = CLK_NORMALIZED_COORDS_TRUE | CLK_ADDRESS_CLAMP_TO_EDGE | CLK_FILTER_LINEAR;
+
 	_ray->distance = t;
-	_ray->diffuseReflectivity = (1.f - _reflectFraction) * ((1.f - u - v) * _triangle->v[0].textureCoord + u * _triangle->v[1].textureCoord + v * _triangle->v[2].textureCoord);
+	_ray->diffuseReflectivity = (1.f - _reflectFraction) * read_imagef(_diffuseTex, diffSampler, texCoord);
 	_ray->diffuseReflectivity.w = 1.f;
 	_ray->strength = _reflectFraction;
 	_ray->shininess = _reflectFraction * 400.f;
@@ -284,7 +288,7 @@ bool triangleIntersect(Ray* _ray, __global Triangle* _triangle, float _reflectFr
 	return true;
 }
 
-__kernel void findClosestTriangles(__global Ray* _rays, int numRays, __global Triangle* _triangles, int _numTriangles, float _reflectFraction)
+__kernel void findClosestTriangles(__global Ray* _rays, int numRays, __global Triangle* _triangles, int _numTriangles, float _reflectFraction, image2d_t _diffuseTex)
 {
 	int id = get_global_id(0);
 	if (id >= numRays)
@@ -297,7 +301,7 @@ __kernel void findClosestTriangles(__global Ray* _rays, int numRays, __global Tr
 		if (r.collideGroup == 1 && r.collideObject == i)
 			continue;
 
-		if(triangleIntersect(&r, &_triangles[i], _reflectFraction))
+		if(triangleIntersect(&r, &_triangles[i], _reflectFraction, _diffuseTex))
 		{
 			r.collideGroup = 1;
 			r.collideObject = i;

@@ -10,6 +10,8 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/random.hpp>
 
+#include <IL/il.h>
+
 #include <chrono>
 #include <fstream>
 #include <iomanip>
@@ -499,6 +501,59 @@ int main(int argc, char** argv)
 
 		window.createFramebuffer(width, height);
 
+		ilInit();
+		ilEnable(IL_ORIGIN_SET);
+		ilOriginFunc(IL_ORIGIN_LOWER_LEFT);
+
+		ILuint image = ilGenImage();
+		ilBindImage(image);
+		ilLoadImage("resources/bthcolor.dds");
+		
+		static const std::pair<int, int> formatOrders[] =
+		{
+			std::make_pair(IL_RGBA, CL_RGBA),
+		};
+
+		static const std::pair<int, int> formatTypes[] =
+		{
+			std::make_pair(IL_FLOAT, CL_FLOAT),
+			std::make_pair(IL_UNSIGNED_BYTE, CL_UNORM_INT8),
+		};
+
+		cl::ImageFormat format(0, 0);
+		ILint imageFormat = ilGetInteger(IL_IMAGE_FORMAT);
+		ILint imageType = ilGetInteger(IL_IMAGE_TYPE);
+		for (auto& f : formatOrders)
+		{
+			if (f.first == imageFormat)
+			{
+				format.image_channel_order = f.second;
+				break;
+			}
+		}
+
+		for (auto& f : formatTypes)
+		{
+			if (f.first == imageType)
+			{
+				format.image_channel_data_type = f.second;
+				break;
+			}
+		}
+
+		if (format.image_channel_data_type == 0 || format.image_channel_order == 0)
+		{
+			throw std::exception("Invalid image format");
+		}
+
+		cl_int err = CL_SUCCESS;
+		cl::Image2D diffuseTexture(context, CL_MEM_COPY_HOST_PTR | CL_MEM_READ_ONLY, format, ilGetInteger(IL_IMAGE_WIDTH), ilGetInteger(IL_IMAGE_HEIGHT),
+			0, ilGetData(), &err);
+
+		ilDeleteImage(image);
+
+		ilShutDown();
+
 		cl::Program colorProgram = createProgramFromFile(context, devices, "writeImage.cl");
 		cl::Kernel accumulateColorKernel(colorProgram, "accumulateImage");
 		cl::Kernel dumpImageKernel(colorProgram, "dumpImage");
@@ -591,6 +646,8 @@ int main(int argc, char** argv)
 		findClosestTrianglesKernel.setArg(1, numRays);
 		findClosestTrianglesKernel.setArg(2, objModel.getBuffer());
 		findClosestTrianglesKernel.setArg(3, objModel.GetVertexCount() / 3);
+		findClosestTrianglesKernel.setArg(5, diffuseTexture);
+		//findClosestTrianglesKernel.setArg(5, 0);
 
 		detectShadowWithTriangles.setArg(0, primaryRaysBuffer);
 		detectShadowWithTriangles.setArg(1, numRays);

@@ -39,12 +39,12 @@
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
-    <IncludePath>$(AMDAPPSDKROOT)/include;$(CUDA_PATH)/include;C:\glew-1.10.0\include;$(ProgramFiles)\GLFW\include;C:\glm;$(IncludePath)</IncludePath>
-    <LibraryPath>C:/glew-1.10.0/lib/Release MX/$(Platform)/;C:/glew-1.10.0/lib/Release/$(Platform)/;$(ProgramFiles)\GLFW/lib;$(AMDAPPSDKROOT)/lib/x86;$(CUDA_PATH)/lib/Win32;$(LibraryPath)</LibraryPath>
+    <IncludePath>$(AMDAPPSDKROOT)/include;C:\DevIL\include;$(CUDA_PATH)/include;C:\glew-1.10.0\include;$(ProgramFiles)\GLFW\include;C:\glm;$(IncludePath)</IncludePath>
+    <LibraryPath>C:/glew-1.10.0/lib/Release MX/$(Platform)/;C:\DevIL\lib;C:/glew-1.10.0/lib/Release/$(Platform)/;$(ProgramFiles)\GLFW/lib;$(AMDAPPSDKROOT)/lib/x86;$(CUDA_PATH)/lib/Win32;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
-    <IncludePath>$(AMDAPPSDKROOT)/include;$(CUDA_PATH)/include;C:\glew-1.10.0\include;$(ProgramFiles)\GLFW\include;C:\glm;$(IncludePath)</IncludePath>
-    <LibraryPath>C:/glew-1.10.0/lib/Release MX/$(Platform)/;C:/glew-1.10.0/lib/Release/$(Platform)/;$(ProgramFiles)\GLFW/lib;$(AMDAPPSDKROOT)/lib/x86;$(CUDA_PATH)/lib/Win32;$(LibraryPath)</LibraryPath>
+    <IncludePath>$(AMDAPPSDKROOT)/include;C:\DevIL\include;$(CUDA_PATH)/include;C:\glew-1.10.0\include;$(ProgramFiles)\GLFW\include;C:\glm;$(IncludePath)</IncludePath>
+    <LibraryPath>C:/glew-1.10.0/lib/Release MX/$(Platform)/;C:\DevIL\lib;C:/glew-1.10.0/lib/Release/$(Platform)/;$(ProgramFiles)\GLFW/lib;$(AMDAPPSDKROOT)/lib/x86;$(CUDA_PATH)/lib/Win32;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
@@ -55,7 +55,7 @@
     </ClCompile>
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>OpenCL.lib;glfw3.lib;glew32.lib;opengl32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>OpenCL.lib;glfw3.lib;glew32.lib;opengl32.lib;DevIL.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -71,7 +71,7 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-      <AdditionalDependencies>OpenCL.lib;glfw3.lib;glew32.lib;opengl32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>OpenCL.lib;glfw3.lib;glew32.lib;opengl32.lib;DevIL.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
