@@ -197,7 +197,7 @@ cl::Program createProgramFromFile(cl::Context& _context, std::vector<cl::Device>
 
 	try
 	{
-		program.build(_devices, "-Werror");
+		program.build(_devices, "-Werror -cl-fast-relaxed-math -cl-denorms-are-zero");
 	}
 	catch (const cl::Error&)
 	{
@@ -640,7 +640,7 @@ int main(int argc, char** argv)
 		initTimer();
 
 		ObjModel objModel;
-		objModel.Initialize(context, "resources/cube.obj");
+		objModel.Initialize(context, "resources/cubeX10.obj");
 
 		findClosestTrianglesKernel.setArg(0, primaryRaysBuffer);
 		findClosestTrianglesKernel.setArg(1, numRays);
@@ -767,17 +767,18 @@ int main(int argc, char** argv)
 			window.drawFramebuffer();
 			auto drawEnd = std::chrono::high_resolution_clock::now();
 
+			incTime("Aquire objects", getExecutionTime(aqEvent));
+			incTime("Release objects", getExecutionTime(relEvent));
 			incTime("Write lights", getExecutionTime(writeLightsEvent));
 			incTime("Write spheres", getExecutionTime(writeLightsEvent));
 			incTime("Primary rays", getExecutionTime(primEvent));
 			incTime("Intersection Spheres", intersectSpheresEvents);
 			incTime("Intersection Triangles", triangleEvents);
-			incTime("Aquire objects", getExecutionTime(aqEvent));
-			incTime("Release objects", getExecutionTime(relEvent));
 			incTime("Move rays", moveRaysEvents);
 			incTime("Rays to light", updateRaysToLights);
 			incTime("Shadow spheres", sphereShadowEvents);
 			incTime("Shadow triangles", triangleShadowEvents);
+			incTime("Accumulate colors", accumulateColorEvents);
 			incTime("Dump image", getExecutionTime(dumpEvent));
 
 			incTime("Total OpenCL", std::chrono::duration_cast<std::chrono::nanoseconds>(drawStart - startCL).count());

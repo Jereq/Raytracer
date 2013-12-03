@@ -25,46 +25,50 @@ __kernel void accumulateImage(__global float4* _accumulationBuffer, __global Ray
 	int id = get_global_id(0);
 	if (id >= _numRays)
 		return;
-	Ray r = _rays[id];
-	
-	if (r.distance == INFINITY)
+
+	if (_rays[id].distance == INFINITY)
 	{
-		_accumulationBuffer[id] += r.strength * (float4)(0.f, 0.2f, 0.f, 0.f);
-	}
-	else
-	{
-		float4 surfaceReflectivity = r.diffuseReflectivity;
-		float4 color = {0.f, 0.f, 0.f, 0.f};
-
-		if(r.inShadow == false)
-		{
-			float4 intersectPoint = r.position;
-			float4 relativePos = _lights[_lightIdx].position - intersectPoint;
-			float4 lightDir = normalize(relativePos);
-			float distanceSq = dot(relativePos, relativePos);
-
-			float NdotL = dot(r.surfaceNormal, lightDir);
-			float intensity = clamp(NdotL, 0.f, 1.f);
-
-			float4 diffuseLight = intensity * _lights[_lightIdx].intensity / distanceSq;
-
-			float4 halfway = normalize(lightDir - (r.reflectDir - 2 * dot(r.reflectDir, r.surfaceNormal) * r.surfaceNormal));
-
-			float NdotH = dot(r.surfaceNormal, halfway);
-			intensity = pow(clamp(NdotH, 0.f, 1.f), r.shininess);
-
-			float4 specularLight = intensity * _lights[_lightIdx].intensity / distanceSq;
-
-			color += surfaceReflectivity * (diffuseLight + specularLight);
-		}
-	
-		_accumulationBuffer[id] += r.strength * (float4)(color.xyz, 0.f);
+		_rays[id].direction = _rays[id].reflectDir;
+		return;
 	}
 
-	r.direction = r.reflectDir;
-	r.distance = INFINITY;
+	if (_rays[id].inShadow)
+	{
+		_rays[id].direction = _rays[id].reflectDir;
+		_rays[id].distance = INFINITY;
+		return;
+	}
 
-	_rays[id] = r;
+	float4 position = _rays[id].position;
+	float4 surfaceReflectivity = _rays[id].diffuseReflectivity;
+	float4 normal = _rays[id].surfaceNormal;
+	float4 reflectDir = _rays[id].reflectDir;
+	float shininess = _rays[id].shininess;
+	float strength = _rays[id].strength;
+
+	float4 intersectPoint = position;
+	float4 relativePos = _lights[_lightIdx].position - intersectPoint;
+	float4 lightDir = normalize(relativePos);
+	float distanceSq = dot(relativePos, relativePos);
+
+	float NdotL = dot(normal, lightDir);
+	float intensity = clamp(NdotL, 0.f, 1.f);
+
+	float4 diffuseLight = intensity * _lights[_lightIdx].intensity / distanceSq;
+
+	float4 halfway = normalize(lightDir - (reflectDir - 2 * dot(reflectDir, normal) * normal));
+
+	float NdotH = dot(normal, halfway);
+	intensity = pow(clamp(NdotH, 0.f, 1.f), shininess);
+
+	float4 specularLight = intensity * _lights[_lightIdx].intensity / distanceSq;
+
+	float4 color = surfaceReflectivity * (diffuseLight + specularLight);
+	
+	_accumulationBuffer[id] += strength * (float4)(color.xyz, 0.f);
+
+	_rays[id].direction = reflectDir;
+	_rays[id].distance = INFINITY;
 }
 
 __kernel void dumpImage(__global float4* _accumulationBuffer, __global Ray* _rays, __write_only image2d_t _image)
