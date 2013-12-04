@@ -59,5 +59,11 @@
     <None Include="writeImage.cl">
       <Filter>Kernel Files</Filter>
     </None>
+    <None Include="Types.hcl">
+      <Filter>Kernel Files</Filter>
+    </None>
+    <None Include="Transform.cl">
+      <Filter>Kernel Files</Filter>
+    </None>
   </ItemGroup>
 </Project>

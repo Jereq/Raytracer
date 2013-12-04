@@ -284,6 +284,16 @@ unsigned int numLights = 1;
 unsigned int numBounces = 1;
 float cubeReflect = 0.5f;
 float cubeReflectStep = 0.1f;
+std::string modelNames[] = {
+	"resources/cube.obj",
+	"resources/12 tri.obj",
+	"resources/48 tri.obj",
+	"resources/192 tri.obj",
+	"resources/768 tri.obj",
+	"resources/3072 tri.obj",
+};
+const int NUM_MODELS = sizeof(modelNames) / sizeof(std::string);
+bool showModels[NUM_MODELS] = {true};
 
 void keyCallback(GLFWwindow* _window, int _key, int _scanCode, int _action, int _mod)
 {
@@ -367,6 +377,13 @@ void keyCallback(GLFWwindow* _window, int _key, int _scanCode, int _action, int 
 			}
 		}
 		break;
+
+	default:
+		if (_key >= GLFW_KEY_1 && _key < GLFW_KEY_1 + NUM_MODELS && _action == GLFW_PRESS)
+		{
+			int model = _key - GLFW_KEY_1;
+			showModels[model] = !showModels[model];
+		}
 	}
 }
 
@@ -474,6 +491,11 @@ cl::Event runKernel(const cl::CommandQueue& queue, const cl::Kernel& kernel, con
 	return event;
 }
 
+unsigned int leastMultiple(unsigned int _val, unsigned int _mul)
+{
+	return ((_val + _mul - 1) / _mul) * _mul;
+}
+
 int main(int argc, char** argv)
 {
 	const static int width = 1024;
@@ -567,6 +589,9 @@ int main(int argc, char** argv)
 		cl::Kernel updateRaysToLightKernel(rayProgram, "updateRaysToLight");
 		cl::Kernel moveRaysToIntersectionKernel(rayProgram, "moveRaysToIntersection");
 
+		cl::Program transformProgram = createProgramFromFile(context, devices, "Transform.cl");
+		cl::Kernel transformVerticesKernel(transformProgram, "transformVertices");
+
 		cl::BufferRenderGL renderbuffer(context, CL_MEM_READ_WRITE, window.getRenderbuffer());
 
 		int imageWidth = window.getFramebufferWidth();
@@ -639,20 +664,28 @@ int main(int argc, char** argv)
 		int frames = 0;
 		initTimer();
 
-		ObjModel objModel;
-		objModel.Initialize(context, "resources/cubeX10.obj");
+		ObjModel objModels[NUM_MODELS];
+		cl::Buffer objTransformedModels[NUM_MODELS];
+		glm::vec3 objPositions[NUM_MODELS];
+		float objScales[NUM_MODELS];
+		glm::vec3 objRotations[NUM_MODELS];
+		for (unsigned int i = 0; i < NUM_MODELS; i++)
+		{
+			objModels[i].Initialize(context, modelNames[i].c_str());
+			objTransformedModels[i] = cl::Buffer(context, CL_MEM_READ_ONLY, objModels[i].GetVertexCount() * sizeof(ObjModel::VertexType));
+
+			objPositions[i] = glm::vec3(i * i * -3.f, 0.f, 0.f);
+			objScales[i] = (i == 0) ? 1.f : (1.f / 100.f * i);
+			objRotations[i] = glm::vec3();
+		}
 
 		findClosestTrianglesKernel.setArg(0, primaryRaysBuffer);
 		findClosestTrianglesKernel.setArg(1, numRays);
-		findClosestTrianglesKernel.setArg(2, objModel.getBuffer());
-		findClosestTrianglesKernel.setArg(3, objModel.GetVertexCount() / 3);
 		findClosestTrianglesKernel.setArg(5, diffuseTexture);
 		//findClosestTrianglesKernel.setArg(5, 0);
 
 		detectShadowWithTriangles.setArg(0, primaryRaysBuffer);
 		detectShadowWithTriangles.setArg(1, numRays);
-		detectShadowWithTriangles.setArg(2, objModel.getBuffer());
-		detectShadowWithTriangles.setArg(3, objModel.GetVertexCount() / 3);
 
 		dumpImageKernel.setArg(0, accumulationBuffer);
 		dumpImageKernel.setArg(1, primaryRaysBuffer);
@@ -730,13 +763,44 @@ int main(int argc, char** argv)
 			std::vector<cl::Event> triangleShadowEvents;
 			std::vector<cl::Event> accumulateColorEvents;
 			std::vector<cl::Event> moveRaysEvents;
+			std::vector<cl::Event> transformModelEvents;
 
 			cl::Event primEvent = runKernel(queue, primaryRaysKernel, global, local, events);
+
+			for (unsigned int k = 0; k < NUM_MODELS; k++)
+			{
+				if (showModels[k])
+				{
+					glm::mat4 world;
+					glm::mat4 translation = glm::transpose(glm::translate(glm::mat4(1.f), objPositions[k]));
+					glm::mat4 scaling = glm::scale(world, glm::vec3(objScales[k]));
+					world = scaling * translation;
+
+					glm::mat4 invTranspose = glm::inverse(world);
+					invTranspose = glm::transpose(invTranspose);
+
+					transformVerticesKernel.setArg(0, objModels[k].getBuffer());
+					transformVerticesKernel.setArg(1, objTransformedModels[k]);
+					transformVerticesKernel.setArg(2, world);
+					transformVerticesKernel.setArg(3, invTranspose);
+					transformVerticesKernel.setArg(4, objModels[k].GetVertexCount());
+					transformModelEvents.push_back(runKernel(queue, transformVerticesKernel, cl::NDRange(leastMultiple(objModels[k].GetVertexCount(), 32)), cl::NDRange(32), events));
+				}
+			}
 
 			for (unsigned int j = 0; j < numBounces; j++)
 			{
 				intersectSpheresEvents.push_back(runKernel(queue, findClosestSpheresKernel, cl::NDRange(numRays), cl::NDRange(32), events));
-				triangleEvents.push_back(runKernel(queue, findClosestTrianglesKernel, cl::NDRange(numRays), cl::NDRange(32), events));
+
+				for (unsigned int k = 0; k < NUM_MODELS; k++)
+				{
+					if (showModels[k])
+					{
+						findClosestTrianglesKernel.setArg(2, objTransformedModels[k]);
+						findClosestTrianglesKernel.setArg(3, objModels[k].GetVertexCount() / 3);
+						triangleEvents.push_back(runKernel(queue, findClosestTrianglesKernel, cl::NDRange(numRays), cl::NDRange(32), events));
+					}
+				}
 				moveRaysEvents.push_back(runKernel(queue, moveRaysToIntersectionKernel, cl::NDRange(numRays), cl::NDRange(32), events));
 
 				for (unsigned int i = 0; i < numLights; i++)
@@ -744,7 +808,15 @@ int main(int argc, char** argv)
 					updateRaysToLightKernel.setArg(3, i);
 					updateRaysToLights.push_back(runKernel(queue, updateRaysToLightKernel, cl::NDRange(numRays), cl::NDRange(32), events));
 					sphereShadowEvents.push_back(runKernel(queue, detectShadowWithSpheres, cl::NDRange(numRays), cl::NDRange(32), events));
-					triangleShadowEvents.push_back(runKernel(queue, detectShadowWithTriangles, cl::NDRange(numRays), cl::NDRange(32), events));
+					for (unsigned int k = 0; k < NUM_MODELS; k++)
+					{
+						if (showModels[k])
+						{
+							detectShadowWithTriangles.setArg(2, objTransformedModels[k]);
+							detectShadowWithTriangles.setArg(3, objModels[k].GetVertexCount() / 3);
+							triangleShadowEvents.push_back(runKernel(queue, detectShadowWithTriangles, cl::NDRange(numRays), cl::NDRange(32), events));
+						}
+					}
 
 					accumulateColorKernel.setArg(4, i);
 					accumulateColorEvents.push_back(runKernel(queue, accumulateColorKernel, cl::NDRange(numRays), cl::NDRange(32), events));

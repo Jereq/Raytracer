@@ -7,7 +7,7 @@ using std::vector;
 
 class ObjModel
 {
-private:
+public:
 	//this typedef must match the layout in the Shader Class
 	struct VertexType
 	{
@@ -16,7 +16,8 @@ private:
 		glm::vec4 normal;
 		glm::vec4 tangent;
 		glm::vec4 binormal;
-	};	
+	};
+private:
 	struct FaceType
 	{
 		int vIndex1, vIndex2, vIndex3;
@@ -68,7 +69,7 @@ public:
 
 	void SetPosition(float posX, float posY, float posZ);
 
-	bool Initialize(cl::Context &context, char *modelFilename/*, WCHAR *textureFilename1, WCHAR *textureFilename2*/);
+	bool Initialize(cl::Context &context, const char *modelFilename/*, WCHAR *textureFilename1, WCHAR *textureFilename2*/);
 	void Shutdown(void);
 
 	cl::Buffer getBuffer();
@@ -82,10 +83,10 @@ private:
 		WCHAR *textureFilename2);
 	void ReleaseTextures(void);*/
 
-	bool LoadFile(char *filename);
-	bool ReadFileCounts(char *filename,	int &vertexCount, int &textureCount, 
+	bool LoadFile(const char *filename);
+	bool ReadFileCounts(const char *filename,	int &vertexCount, int &textureCount, 
 		int &normalCount, int &faceCout, int &groupCount);
-	bool LoadDataStructures(char *filename, int &vertexCount, int &textureCount, 
+	bool LoadDataStructures(const char *filename, int &vertexCount, int &textureCount, 
 		int &normalCount, int &faceCount);
 	void ReleaseModel(void);
 

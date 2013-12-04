@@ -1,24 +1,4 @@
-typedef struct Ray
-{
-	float4 position;
-	float4 direction;
-	float4 diffuseReflectivity;
-	float4 surfaceNormal;
-	float4 reflectDir;
-	float distance;
-	float shininess;
-	float strength;
-	float totalStrength;
-	int inShadow;
-	int collideGroup;
-	int collideObject;
-} Ray;
-
-typedef struct Light
-{
-	float4 position;
-	float4 intensity;
-} Light;
+#include "Types.hcl"
 
 __kernel void accumulateImage(__global float4* _accumulationBuffer, __global Ray* _rays, int _numRays, __constant Light* _lights, int _lightIdx)
 {

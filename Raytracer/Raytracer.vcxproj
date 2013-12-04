@@ -90,6 +90,8 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="rayTracing.cl" />
+    <None Include="Transform.cl" />
+    <None Include="Types.hcl" />
     <None Include="writeImage.cl" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

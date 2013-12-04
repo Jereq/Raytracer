@@ -1,71 +1,9 @@
-typedef struct mat4
-{
-	union
-	{
-		float4 rows[4];
-	};
-} mat4;
-
-typedef struct Ray
-{
-	float4 position;
-	float4 direction;
-	float4 diffuseReflectivity;
-	float4 surfaceNormal;
-	float4 reflectDir;
-	float distance;
-	float shininess;
-	float strength;
-	float totalStrength;
-	int inShadow;
-	int collideGroup;
-	int collideObject;
-} Ray;
-
-typedef struct Sphere
-{
-	float4 position;
-	float4 diffuseReflectivity;
-	float radius;
-	float reflectFraction;
-} Sphere;
-
-typedef struct Vertex
-{
-	float4 position;
-	float4 textureCoord;
-	float4 normal;
-	float4 tangent;
-	float4 biTangent;
-} Vertex;
-
-typedef struct Triangle
-{
-	Vertex v[3];
-} Triangle;
-
-typedef struct Light
-{
-	float4 position;
-	float4 intensity;
-} Light;
+#include "Types.hcl"
 
 __constant Light l = {
 	{0.f, 0.f, 50.f, 1.f},
 	{0.7f, 0.7f, 0.7f, 0.f}
 };
-
-float4 matmul(const mat4* _mat, const float4* _vec)
-{
-	float4 res = {
-		dot(_mat->rows[0], *_vec),
-		dot(_mat->rows[1], *_vec),
-		dot(_mat->rows[2], *_vec),
-		dot(_mat->rows[3], *_vec)
-	};
-
-	return res;
-}
 
 __kernel void primaryRays(__global Ray* _res, const mat4 _invMat, const float4 _camPos, const int _width, const int _height, __global float4* _accumulationBuffer)
 {

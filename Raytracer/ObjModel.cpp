@@ -44,7 +44,7 @@ void ObjModel::SetPosition(float x, float y, float z)
 	mPositionZ = z;
 }
 
-bool ObjModel::Initialize(cl::Context &context, char *modelFilename/*, 
+bool ObjModel::Initialize(cl::Context &context, const char *modelFilename/*, 
 	WCHAR *textureFilename1, WCHAR *textureFilename2*/)
 {
 	bool tResult;
@@ -135,7 +135,7 @@ void ObjModel::ShutdownBuffers(void)
 //	SAFE_SHUTDOWN(mTextureArray);
 //}
 
-bool ObjModel::LoadFile(char *filename)
+bool ObjModel::LoadFile(const char *filename)
 {	
 	bool tResult;
 	int tVertexCount;
@@ -163,7 +163,7 @@ bool ObjModel::LoadFile(char *filename)
 	return true;
 }
 
-bool ObjModel::ReadFileCounts(char *filename, int &vertexCount,
+bool ObjModel::ReadFileCounts(const char *filename, int &vertexCount,
 	int &textureCount, int &normalCount, int &faceCount, int &groupCount)
 {	
 	ifstream tFileIn;
@@ -223,7 +223,7 @@ bool ObjModel::ReadFileCounts(char *filename, int &vertexCount,
 	return true;
 }
 
-bool ObjModel::LoadDataStructures(char *filename, int &vertexCount,
+bool ObjModel::LoadDataStructures(const char *filename, int &vertexCount,
 	int &textureCount, int &normalCount, int &faceCount)
 {
 	vector<ReadVertexType> tVertices;
