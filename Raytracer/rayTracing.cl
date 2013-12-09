@@ -167,7 +167,7 @@ __kernel void updateRaysToLight(__global Ray* _rays, int _numRays, __constant Li
 
 	float4 relativeLightPos = _lights[_lightIdx].position - position;
 	float newDistance = length(relativeLightPos);
-	float4 direction = relativeLightPos / distance;
+	float4 direction = relativeLightPos / newDistance;
 
 	_rays[id].distance = newDistance;
 	_rays[id].direction = direction;
