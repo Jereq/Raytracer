@@ -286,6 +286,7 @@ float cubeReflect = 0.5f;
 float cubeReflectStep = 0.1f;
 std::string modelNames[] = {
 	"resources/cube.obj",
+	"resources/cubeInv.obj",
 	"resources/12 tri.obj",
 	"resources/48 tri.obj",
 	"resources/192 tri.obj",
@@ -676,10 +677,13 @@ int main(int argc, char** argv)
 			objModels[i].Initialize(context, modelNames[i].c_str());
 			objTransformedModels[i] = cl::Buffer(context, CL_MEM_READ_ONLY, objModels[i].GetVertexCount() * sizeof(ObjModel::VertexType));
 
-			objPositions[i] = glm::vec3(i * i * -3.f, 0.f, 0.f);
-			objScales[i] = (i == 0) ? 1.f : (1.f / 100.f * i);
+			objPositions[i] = glm::vec3(-3.f, 0.f, i * -2.f + 6.f);
+			objScales[i] = 0.003f;
 			objRotations[i] = glm::vec3();
 		}
+		objPositions[1] = glm::vec3();
+		objScales[1] = 20.f;
+		objScales[0] = 1.f;
 
 		findClosestTrianglesKernel.setArg(0, primaryRaysBuffer);
 		findClosestTrianglesKernel.setArg(1, numRays);
