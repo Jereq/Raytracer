@@ -630,6 +630,7 @@ int main(int argc, char** argv)
 		findClosestSpheresKernel.setArg(1, numRays);
 		findClosestSpheresKernel.setArg(2, spheresBuffer);
 		findClosestSpheresKernel.setArg(3, NUM_SPHERES);
+		findClosestSpheresKernel.setArg(4, 0);
 
 		std::vector<MovingLight> movLights;
 		for (unsigned int i = 0; i < MAX_LIGHTS; i++)
@@ -644,6 +645,7 @@ int main(int argc, char** argv)
 		detectShadowWithSpheres.setArg(1, numRays);
 		detectShadowWithSpheres.setArg(2, spheresBuffer);
 		detectShadowWithSpheres.setArg(3, NUM_SPHERES);
+		detectShadowWithSpheres.setArg(4, 0);
 		
 		cl::NDRange local(32, 8);
 		cl::NDRange global(toMultiple(width, local[0]), toMultiple(height, local[1]));
@@ -798,6 +800,7 @@ int main(int argc, char** argv)
 					{
 						findClosestTrianglesKernel.setArg(2, objTransformedModels[k]);
 						findClosestTrianglesKernel.setArg(3, objModels[k].GetVertexCount() / 3);
+						findClosestTrianglesKernel.setArg(6, k + 1);
 						triangleEvents.push_back(runKernel(queue, findClosestTrianglesKernel, cl::NDRange(numRays), cl::NDRange(32), events));
 					}
 				}
@@ -814,6 +817,7 @@ int main(int argc, char** argv)
 						{
 							detectShadowWithTriangles.setArg(2, objTransformedModels[k]);
 							detectShadowWithTriangles.setArg(3, objModels[k].GetVertexCount() / 3);
+							detectShadowWithTriangles.setArg(4, k + 1);
 							triangleShadowEvents.push_back(runKernel(queue, detectShadowWithTriangles, cl::NDRange(numRays), cl::NDRange(32), events));
 						}
 					}
