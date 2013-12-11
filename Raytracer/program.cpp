@@ -7,7 +7,7 @@
 #include "CL/cl.hpp"
 
 #include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtx/transform.hpp>
 #include <glm/gtc/random.hpp>
 
 #include <IL/il.h>
@@ -285,8 +285,8 @@ unsigned int numBounces = 1;
 float cubeReflect = 0.5f;
 float cubeReflectStep = 0.1f;
 std::string modelNames[] = {
-	"resources/cube.obj",
 	"resources/cubeInv.obj",
+	"resources/cube.obj",
 	"resources/12 tri.obj",
 	"resources/48 tri.obj",
 	"resources/192 tri.obj",
@@ -294,6 +294,37 @@ std::string modelNames[] = {
 	"resources/3072 tri.obj",
 };
 const int NUM_MODELS = sizeof(modelNames) / sizeof(std::string);
+
+const glm::vec3 modelPositions[NUM_MODELS] = {
+	glm::vec3(0.f, 0.f, 0.f),
+	glm::vec3(0.f, 0.f, 0.f),
+	glm::vec3(-3.f, -0.5f, 4.f),
+	glm::vec3(-3.f, -0.5f, 2.f),
+	glm::vec3(-3.f, -0.5f, 0.f),
+	glm::vec3(-3.f, -0.5f, -2.f),
+	glm::vec3(-3.f, -0.5f, -4.f),
+};
+
+const float modelScales[NUM_MODELS] = {
+	20.f,
+	1.f,
+	0.005f,
+	0.005f,
+	0.005f,
+	0.005f,
+	0.005f,
+};
+
+const glm::vec3 modelRotationSpeeds[NUM_MODELS] = {
+	glm::vec3(0.f, 0.f, 0.f),
+	glm::vec3(5.f, 10.f, 13.f),
+	glm::vec3(10.f, 1.f, 1.f),
+	glm::vec3(15.f, 1.f, 1.f),
+	glm::vec3(20.f, 1.f, 1.f),
+	glm::vec3(30.f, 1.f, 1.f),
+	glm::vec3(90.f, 1.f, 1.f),
+};
+
 bool showModels[NUM_MODELS] = {true};
 
 void keyCallback(GLFWwindow* _window, int _key, int _scanCode, int _action, int _mod)
@@ -636,7 +667,7 @@ int main(int argc, char** argv)
 		std::vector<MovingLight> movLights;
 		for (unsigned int i = 0; i < MAX_LIGHTS; i++)
 		{
-			movLights.push_back(MovingLight(glm::vec4(20.f, 20.f, 20.f, 0.f),
+			movLights.push_back(MovingLight(glm::vec4(50.f, 50.f, 50.f, 0.f),
 				glm::vec4(i, 0.f, 10.f, 1.f), glm::vec4(i, 0.f, -10.f, 1.f), 1.f / (i + 1)));
 		}
 
@@ -669,21 +700,12 @@ int main(int argc, char** argv)
 
 		ObjModel objModels[NUM_MODELS];
 		cl::Buffer objTransformedModels[NUM_MODELS];
-		glm::vec3 objPositions[NUM_MODELS];
-		float objScales[NUM_MODELS];
 		glm::vec3 objRotations[NUM_MODELS];
 		for (unsigned int i = 0; i < NUM_MODELS; i++)
 		{
 			objModels[i].Initialize(context, modelNames[i].c_str());
 			objTransformedModels[i] = cl::Buffer(context, CL_MEM_READ_ONLY, objModels[i].GetVertexCount() * sizeof(ObjModel::VertexType));
-
-			objPositions[i] = glm::vec3(-3.f, 0.f, i * -2.f + 6.f);
-			objScales[i] = 0.003f;
-			objRotations[i] = glm::vec3();
 		}
-		objPositions[1] = glm::vec3();
-		objScales[1] = 20.f;
-		objScales[0] = 1.f;
 
 		findClosestTrianglesKernel.setArg(0, primaryRaysBuffer);
 		findClosestTrianglesKernel.setArg(1, numRays);
@@ -777,13 +799,17 @@ int main(int argc, char** argv)
 			{
 				if (showModels[k])
 				{
-					glm::mat4 world;
-					glm::mat4 translation = glm::transpose(glm::translate(glm::mat4(1.f), objPositions[k]));
-					glm::mat4 scaling = glm::scale(world, glm::vec3(objScales[k]));
-					world = scaling * translation;
+					objRotations[k] += modelRotationSpeeds[k] * (float)deltaTime;
 
-					glm::mat4 invTranspose = glm::inverse(world);
-					invTranspose = glm::transpose(invTranspose);
+					glm::mat4 translation = glm::transpose(glm::translate(modelPositions[k]));
+					glm::mat4 rotationYaw = glm::transpose(glm::rotate(objRotations[k].x, glm::vec3(0.f, 1.f, 0.f)));
+					glm::mat4 rotationPitch = glm::transpose(glm::rotate(objRotations[k].y, glm::vec3(1.f, 0.f, 0.f)));
+					glm::mat4 rotationRoll = glm::transpose(glm::rotate(objRotations[k].z, glm::vec3(0.f, 0.f, 1.f)));
+					glm::mat4 scaling = glm::scale(glm::vec3(modelScales[k]));
+
+					glm::mat4 world = scaling * rotationYaw * rotationPitch * rotationRoll * translation;
+
+					glm::mat4 invTranspose = glm::transpose(glm::inverse(scaling * rotationYaw * rotationPitch * rotationRoll));
 
 					transformVerticesKernel.setArg(0, objModels[k].getBuffer());
 					transformVerticesKernel.setArg(1, objTransformedModels[k]);
