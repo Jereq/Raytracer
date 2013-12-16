@@ -677,9 +677,6 @@ int main(int argc, char** argv)
 		detectShadowWithSpheres.setArg(2, spheresBuffer);
 		detectShadowWithSpheres.setArg(3, NUM_SPHERES);
 		detectShadowWithSpheres.setArg(4, 0);
-		
-		cl::NDRange local;
-		cl::NDRange global;
 
 		updateRaysToLightKernel.setArg(2, lightBuffer);
 		updateRaysToLightKernel.setArg(3, 0);
@@ -702,10 +699,12 @@ int main(int argc, char** argv)
 		}
 
 		findClosestTrianglesKernel.setArg(5, diffuseTexture);
+		
+		cl::NDRange local2D(32, 8);
+		cl::NDRange global2D;
 
-		size_t local_ws;
-		size_t global_wsx;
-		size_t global_wsy;
+		cl::NDRange linearLocalSize(32);
+		cl::NDRange linearGlobalSize;
 		
 		accumulateColorKernel.setArg(3, lightBuffer);
 
@@ -753,8 +752,9 @@ int main(int argc, char** argv)
 				detectShadowWithSpheres.setArg(0, primaryRaysBuffer);
 				detectShadowWithSpheres.setArg(1, numRays);
 				
-				local = cl::NDRange(32, 8);
-				global = cl::NDRange(leastMultiple(windowWidth, local[0]), leastMultiple(windowHeight, local[1]));
+				global2D = cl::NDRange(leastMultiple(windowWidth, local2D[0]), leastMultiple(windowHeight, local2D[1]));
+
+				linearGlobalSize = cl::NDRange(leastMultiple(numRays, linearLocalSize[0]));
 
 				updateRaysToLightKernel.setArg(0, primaryRaysBuffer);
 				updateRaysToLightKernel.setArg(1, numRays);
@@ -771,10 +771,6 @@ int main(int argc, char** argv)
 				dumpImageKernel.setArg(0, accumulationBuffer);
 				dumpImageKernel.setArg(1, primaryRaysBuffer);
 				dumpImageKernel.setArg(2, renderbuffer);
-		
-				local_ws = 16;
-				global_wsx = leastMultiple(windowWidth, local_ws);
-				global_wsy = leastMultiple(windowHeight, local_ws);
 		
 				accumulateColorKernel.setArg(0, accumulationBuffer);
 				accumulateColorKernel.setArg(1, primaryRaysBuffer);
@@ -830,7 +826,7 @@ int main(int argc, char** argv)
 			std::vector<cl::Event> moveRaysEvents;
 			std::vector<cl::Event> transformModelEvents;
 
-			cl::Event primEvent = runKernel(queue, primaryRaysKernel, global, local, events);
+			cl::Event primEvent = runKernel(queue, primaryRaysKernel, global2D, local2D, events);
 
 			for (unsigned int k = 0; k < NUM_MODELS; k++)
 			{
@@ -853,13 +849,13 @@ int main(int argc, char** argv)
 					transformVerticesKernel.setArg(2, world);
 					transformVerticesKernel.setArg(3, invTranspose);
 					transformVerticesKernel.setArg(4, objModels[k].GetVertexCount());
-					transformModelEvents.push_back(runKernel(queue, transformVerticesKernel, cl::NDRange(leastMultiple(objModels[k].GetVertexCount(), 32)), cl::NDRange(32), events));
+					transformModelEvents.push_back(runKernel(queue, transformVerticesKernel, cl::NDRange(leastMultiple(objModels[k].GetVertexCount(), linearLocalSize[0])), linearLocalSize, events));
 				}
 			}
 
 			for (unsigned int j = 0; j < numBounces; j++)
 			{
-				intersectSpheresEvents.push_back(runKernel(queue, findClosestSpheresKernel, cl::NDRange(leastMultiple(numRays, 32)), cl::NDRange(32), events));
+				intersectSpheresEvents.push_back(runKernel(queue, findClosestSpheresKernel, linearGlobalSize, linearLocalSize, events));
 
 				for (unsigned int k = 0; k < NUM_MODELS; k++)
 				{
@@ -868,16 +864,16 @@ int main(int argc, char** argv)
 						findClosestTrianglesKernel.setArg(2, objTransformedModels[k]);
 						findClosestTrianglesKernel.setArg(3, objModels[k].GetVertexCount() / 3);
 						findClosestTrianglesKernel.setArg(6, k + 1);
-						triangleEvents.push_back(runKernel(queue, findClosestTrianglesKernel, cl::NDRange(leastMultiple(numRays, 32)), cl::NDRange(32), events));
+						triangleEvents.push_back(runKernel(queue, findClosestTrianglesKernel, linearGlobalSize, linearLocalSize, events));
 					}
 				}
-				moveRaysEvents.push_back(runKernel(queue, moveRaysToIntersectionKernel, cl::NDRange(leastMultiple(numRays, 32)), cl::NDRange(32), events));
+				moveRaysEvents.push_back(runKernel(queue, moveRaysToIntersectionKernel, linearGlobalSize, linearLocalSize, events));
 
 				for (unsigned int i = 0; i < numLights; i++)
 				{
 					updateRaysToLightKernel.setArg(3, i);
-					updateRaysToLights.push_back(runKernel(queue, updateRaysToLightKernel, cl::NDRange(leastMultiple(numRays, 32)), cl::NDRange(32), events));
-					sphereShadowEvents.push_back(runKernel(queue, detectShadowWithSpheres, cl::NDRange(leastMultiple(numRays, 32)), cl::NDRange(32), events));
+					updateRaysToLights.push_back(runKernel(queue, updateRaysToLightKernel, linearGlobalSize, linearLocalSize, events));
+					sphereShadowEvents.push_back(runKernel(queue, detectShadowWithSpheres, linearGlobalSize, linearLocalSize, events));
 					for (unsigned int k = 0; k < NUM_MODELS; k++)
 					{
 						if (showModels[k])
@@ -885,19 +881,19 @@ int main(int argc, char** argv)
 							detectShadowWithTriangles.setArg(2, objTransformedModels[k]);
 							detectShadowWithTriangles.setArg(3, objModels[k].GetVertexCount() / 3);
 							detectShadowWithTriangles.setArg(4, k + 1);
-							triangleShadowEvents.push_back(runKernel(queue, detectShadowWithTriangles, cl::NDRange(leastMultiple(numRays, 32)), cl::NDRange(32), events));
+							triangleShadowEvents.push_back(runKernel(queue, detectShadowWithTriangles, linearGlobalSize, linearLocalSize, events));
 						}
 					}
 
 					accumulateColorKernel.setArg(4, i);
-					accumulateColorEvents.push_back(runKernel(queue, accumulateColorKernel, cl::NDRange(leastMultiple(numRays, 32)), cl::NDRange(32), events));
+					accumulateColorEvents.push_back(runKernel(queue, accumulateColorKernel, linearGlobalSize, linearLocalSize, events));
 				}
 			}
 
 			cl::Event aqEvent;
 			queue.enqueueAcquireGLObjects(&glObjects, &events, &aqEvent);
 			events.push_back(aqEvent);
-			cl::Event dumpEvent = runKernel(queue, dumpImageKernel, cl::NDRange(global_wsx, global_wsy), cl::NDRange(16, 16), events);
+			cl::Event dumpEvent = runKernel(queue, dumpImageKernel, global2D, local2D, events);
 
 			cl::Event relEvent;
 			queue.enqueueReleaseGLObjects(&glObjects, &events, &relEvent);
