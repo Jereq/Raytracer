@@ -16,8 +16,6 @@ private:
 
 	GLuint framebuffer;
 	GLuint renderbuffer;
-	GLuint framebufferWidth;
-	GLuint framebufferHeight;
 
 	void initOpenGL(const std::string& _title);
 
@@ -26,6 +24,7 @@ public:
 	~GLWindow();
 
 	bool createFramebuffer(GLuint _framebufferWidth, GLuint _framebufferHeight);
+	void updateFramebuffer(GLuint _framebufferWidth, GLuint _framebufferHeight);
 	void destroyFramebuffer();
 	void blitFramebuffer();
 	void clearFramebuffer(float _red, float _green, float _blue);
@@ -37,6 +36,7 @@ public:
 
 	void setKeyCallback(GLFWkeyfun _func);
 	void setMouseCallback(GLFWcursorposfun _func);
+	void setFramebufferSizeCallback(GLFWframebuffersizefun _func);
 
 	void setTitle(const std::string& _title);
 

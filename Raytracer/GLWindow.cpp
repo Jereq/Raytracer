@@ -40,9 +40,7 @@ GLWindow::GLWindow(const std::string& _title, int _width, int _height)
 	  width(_width),
 	  height(_height),
 	  framebuffer(0),
-	  renderbuffer(0),
-	  framebufferWidth(0),
-	  framebufferHeight(0)
+	  renderbuffer(0)
 {
 	initOpenGL(_title);
 }
@@ -55,15 +53,15 @@ GLWindow::~GLWindow()
 
 bool GLWindow::createFramebuffer(GLuint _framebufferWidth, GLuint _framebufferHeight)
 {
-	framebufferWidth = _framebufferWidth;
-	framebufferHeight = _framebufferHeight;
+	width = _framebufferWidth;
+	height = _framebufferHeight;
 
 	glGenFramebuffers(1, &framebuffer);
 	glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
 
 	glGenRenderbuffers(1, &renderbuffer);
 	glBindRenderbuffer(GL_RENDERBUFFER, renderbuffer);
-	glRenderbufferStorage(GL_RENDERBUFFER, GL_RGBA32F, framebufferWidth, framebufferHeight);
+	glRenderbufferStorage(GL_RENDERBUFFER, GL_RGBA32F, width, height);
 
 	glFramebufferRenderbuffer(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, renderbuffer);
 
@@ -71,6 +69,17 @@ bool GLWindow::createFramebuffer(GLuint _framebufferWidth, GLuint _framebufferHe
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
 	return true;
+}
+
+void GLWindow::updateFramebuffer(GLuint _framebufferWidth, GLuint _framebufferHeight)
+{
+	width = _framebufferWidth;
+	height = _framebufferHeight;
+
+	glBindRenderbuffer(GL_RENDERBUFFER, renderbuffer);
+	glRenderbufferStorage(GL_RENDERBUFFER, GL_RGBA32F, width, height);
+
+	glBindRenderbuffer(GL_RENDERBUFFER, 0);
 }
 
 void GLWindow::destroyFramebuffer()
@@ -93,7 +102,7 @@ void GLWindow::blitFramebuffer()
 	glBindFramebuffer(GL_READ_FRAMEBUFFER, framebuffer);
 	glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
 
-	glBlitFramebuffer(0, 0, framebufferWidth, framebufferHeight, 0, 0, width, height, GL_COLOR_BUFFER_BIT, GL_LINEAR);
+	glBlitFramebuffer(0, 0, width, height, 0, 0, width, height, GL_COLOR_BUFFER_BIT, GL_LINEAR);
 
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
@@ -131,12 +140,12 @@ GLuint GLWindow::getRenderbuffer() const
 
 GLuint GLWindow::getFramebufferWidth() const
 {
-	return framebufferWidth;
+	return width;
 }
 
 GLuint GLWindow::getFramebufferHeight() const
 {
-	return framebufferHeight;
+	return height;
 }
 
 void GLWindow::setKeyCallback(GLFWkeyfun _func)
@@ -147,6 +156,11 @@ void GLWindow::setKeyCallback(GLFWkeyfun _func)
 void GLWindow::setMouseCallback(GLFWcursorposfun _func)
 {
 	glfwSetCursorPosCallback(window, _func);
+}
+
+void GLWindow::setFramebufferSizeCallback(GLFWframebuffersizefun _func)
+{
+	glfwSetFramebufferSizeCallback(window, _func);
 }
 
 void GLWindow::setTitle(const std::string& _title)

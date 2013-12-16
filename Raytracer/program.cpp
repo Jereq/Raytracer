@@ -244,11 +244,6 @@ std::ostream& operator<<(std::ostream& _in, const glm::vec4& _vec)
 	return _in << "(" << _vec.x << ", " << _vec.y << ", " << _vec.z << ", " << _vec.w << ")";
 }
 
-int toMultiple(int _val, int _mul)
-{
-	return ((_val + _mul - 1) / _mul) * _mul;
-}
-
 struct Ray
 {
 	glm::vec4 position;
@@ -292,6 +287,7 @@ std::string modelNames[] = {
 	"resources/192 tri.obj",
 	"resources/768 tri.obj",
 	"resources/3072 tri.obj",
+	"resources/bth.obj",
 };
 const int NUM_MODELS = sizeof(modelNames) / sizeof(std::string);
 
@@ -303,6 +299,7 @@ const glm::vec3 modelPositions[NUM_MODELS] = {
 	glm::vec3(-3.f, -0.5f, 0.f),
 	glm::vec3(-3.f, -0.5f, -2.f),
 	glm::vec3(-3.f, -0.5f, -4.f),
+	glm::vec3(0.f, 0.f, 0.f),
 };
 
 const float modelScales[NUM_MODELS] = {
@@ -313,6 +310,7 @@ const float modelScales[NUM_MODELS] = {
 	0.005f,
 	0.005f,
 	0.005f,
+	0.04f,
 };
 
 const glm::vec3 modelRotationSpeeds[NUM_MODELS] = {
@@ -323,6 +321,7 @@ const glm::vec3 modelRotationSpeeds[NUM_MODELS] = {
 	glm::vec3(20.f, 1.f, 1.f),
 	glm::vec3(30.f, 1.f, 1.f),
 	glm::vec3(90.f, 1.f, 1.f),
+	glm::vec3(12.f, 6.7f, 42.f),
 };
 
 bool showModels[NUM_MODELS] = {true};
@@ -440,6 +439,17 @@ void cursorPosCallback(GLFWwindow* _window, double _xPos, double _yPos)
 		rotation.y = -90.f;
 }
 
+bool sizeChanged = true;
+int windowWidth = 0;
+int windowHeight = 0;
+
+void resizeWindowCallback(GLFWwindow* _window, int _width, int _height)
+{
+	sizeChanged = true;
+	windowWidth = _width;
+	windowHeight = _height;
+}
+
 cl_ulong getExecutionTime(const cl::Event& _event)
 {
 	cl_ulong start = _event.getProfilingInfo<CL_PROFILING_COMMAND_START>();
@@ -532,6 +542,8 @@ int main(int argc, char** argv)
 {
 	const static int width = 1024;
 	const static int height = 768;
+	windowWidth = width;
+	windowHeight = height;
 	const static float speed = 2.f;
 
 	const static int NUM_SPHERES = 10;
@@ -544,16 +556,17 @@ int main(int argc, char** argv)
 	
 	try
 	{
-		GLWindow window(WINDOW_TITLE, width, height);
+		GLWindow window(WINDOW_TITLE, windowWidth, windowHeight);
 		window.setKeyCallback(&keyCallback);
 		window.setMouseCallback(&cursorPosCallback);
+		window.setFramebufferSizeCallback(&resizeWindowCallback);
 
 		cl::Context context;
 		std::vector<cl::Device> devices;
 		cl::CommandQueue queue;
 		initCL(context, devices, queue, false);
 
-		window.createFramebuffer(width, height);
+		window.createFramebuffer(windowWidth, windowHeight);
 
 		ilInit();
 		ilEnable(IL_ORIGIN_SET);
@@ -624,28 +637,18 @@ int main(int argc, char** argv)
 		cl::Program transformProgram = createProgramFromFile(context, devices, "Transform.cl");
 		cl::Kernel transformVerticesKernel(transformProgram, "transformVertices");
 
-		cl::BufferRenderGL renderbuffer(context, CL_MEM_READ_WRITE, window.getRenderbuffer());
-
-		int imageWidth = window.getFramebufferWidth();
-		int imageHeight = window.getFramebufferHeight();
-
+		int numRays;
+		cl::Buffer primaryRaysBuffer;
+		cl::Buffer accumulationBuffer;
+		cl::BufferRenderGL renderbuffer;
 		std::vector<cl::Memory> glObjects;
-		glObjects.push_back(renderbuffer);
 
-		Camera camera(45.f, (float)width / (float)height);
+		Camera camera(45.f, (float)windowWidth / (float)windowHeight);
 		camera.setViewDirection(glm::vec3(0.f, 0.f, -1.f));
 		camera.setPosition(glm::vec3(0.f, 1.f, -2.f));
 
-		int numRays = width * height;
-		cl::Buffer primaryRaysBuffer(context, CL_MEM_READ_WRITE, numRays * sizeof(Ray));
-		cl::Buffer accumulationBuffer(context, CL_MEM_READ_WRITE, sizeof(cl_float4) * numRays);
-
-		primaryRaysKernel.setArg(0, primaryRaysBuffer);
 		primaryRaysKernel.setArg(1, glm::transpose(camera.getInvViewProjectionMatrix()));
 		primaryRaysKernel.setArg(2, glm::vec4(camera.getPosition(), 1.f));
-		primaryRaysKernel.setArg(3, width);
-		primaryRaysKernel.setArg(4, height);
-		primaryRaysKernel.setArg(5, accumulationBuffer);
 
 		std::vector<Sphere> spheres(NUM_SPHERES);
 		for (Sphere& s : spheres)
@@ -658,8 +661,6 @@ int main(int argc, char** argv)
 
 		cl::Buffer spheresBuffer(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, sizeof(Sphere) * NUM_SPHERES, spheres.data());
 
-		findClosestSpheresKernel.setArg(0, primaryRaysBuffer);
-		findClosestSpheresKernel.setArg(1, numRays);
 		findClosestSpheresKernel.setArg(2, spheresBuffer);
 		findClosestSpheresKernel.setArg(3, NUM_SPHERES);
 		findClosestSpheresKernel.setArg(4, 0);
@@ -673,22 +674,15 @@ int main(int argc, char** argv)
 
 		cl::Buffer lightBuffer(context, CL_MEM_READ_ONLY, sizeof(Light) * movLights.size());
 
-		detectShadowWithSpheres.setArg(0, primaryRaysBuffer);
-		detectShadowWithSpheres.setArg(1, numRays);
 		detectShadowWithSpheres.setArg(2, spheresBuffer);
 		detectShadowWithSpheres.setArg(3, NUM_SPHERES);
 		detectShadowWithSpheres.setArg(4, 0);
 		
-		cl::NDRange local(32, 8);
-		cl::NDRange global(toMultiple(width, local[0]), toMultiple(height, local[1]));
+		cl::NDRange local;
+		cl::NDRange global;
 
-		updateRaysToLightKernel.setArg(0, primaryRaysBuffer);
-		updateRaysToLightKernel.setArg(1, numRays);
 		updateRaysToLightKernel.setArg(2, lightBuffer);
 		updateRaysToLightKernel.setArg(3, 0);
-
-		moveRaysToIntersectionKernel.setArg(0, primaryRaysBuffer);
-		moveRaysToIntersectionKernel.setArg(1, numRays);
 
 		typedef std::chrono::duration<double> dSec;
 
@@ -707,25 +701,12 @@ int main(int argc, char** argv)
 			objTransformedModels[i] = cl::Buffer(context, CL_MEM_READ_ONLY, objModels[i].GetVertexCount() * sizeof(ObjModel::VertexType));
 		}
 
-		findClosestTrianglesKernel.setArg(0, primaryRaysBuffer);
-		findClosestTrianglesKernel.setArg(1, numRays);
 		findClosestTrianglesKernel.setArg(5, diffuseTexture);
-		//findClosestTrianglesKernel.setArg(5, 0);
 
-		detectShadowWithTriangles.setArg(0, primaryRaysBuffer);
-		detectShadowWithTriangles.setArg(1, numRays);
-
-		dumpImageKernel.setArg(0, accumulationBuffer);
-		dumpImageKernel.setArg(1, primaryRaysBuffer);
-		dumpImageKernel.setArg(2, renderbuffer);
+		size_t local_ws;
+		size_t global_wsx;
+		size_t global_wsy;
 		
-		size_t local_ws = 16;
-		size_t global_wsx = ((width + local_ws - 1) / local_ws) * local_ws;
-		size_t global_wsy = ((height + local_ws - 1) / local_ws) * local_ws;
-		
-		accumulateColorKernel.setArg(0, accumulationBuffer);
-		accumulateColorKernel.setArg(1, primaryRaysBuffer);
-		accumulateColorKernel.setArg(2, numRays);
 		accumulateColorKernel.setArg(3, lightBuffer);
 
 		while (!window.shouldClose())
@@ -744,6 +725,62 @@ int main(int argc, char** argv)
 				std::cout << std::endl;
 
 				frames = 0;
+			}
+
+			if (sizeChanged)
+			{
+				sizeChanged = false;
+
+				window.updateFramebuffer(windowWidth, windowHeight);
+
+				renderbuffer = cl::BufferRenderGL(context, CL_MEM_READ_WRITE, window.getRenderbuffer());
+
+				glObjects.clear();
+				glObjects.push_back(renderbuffer);
+		
+				numRays = windowWidth * windowHeight;
+				primaryRaysBuffer = cl::Buffer(context, CL_MEM_READ_WRITE, numRays * sizeof(Ray));
+				accumulationBuffer = cl::Buffer(context, CL_MEM_READ_WRITE, numRays * sizeof(cl_float4));
+
+				primaryRaysKernel.setArg(0, primaryRaysBuffer);
+				primaryRaysKernel.setArg(3, windowWidth);
+				primaryRaysKernel.setArg(4, windowHeight);
+				primaryRaysKernel.setArg(5, accumulationBuffer);
+				
+				findClosestSpheresKernel.setArg(0, primaryRaysBuffer);
+				findClosestSpheresKernel.setArg(1, numRays);
+
+				detectShadowWithSpheres.setArg(0, primaryRaysBuffer);
+				detectShadowWithSpheres.setArg(1, numRays);
+				
+				local = cl::NDRange(32, 8);
+				global = cl::NDRange(leastMultiple(windowWidth, local[0]), leastMultiple(windowHeight, local[1]));
+
+				updateRaysToLightKernel.setArg(0, primaryRaysBuffer);
+				updateRaysToLightKernel.setArg(1, numRays);
+
+				moveRaysToIntersectionKernel.setArg(0, primaryRaysBuffer);
+				moveRaysToIntersectionKernel.setArg(1, numRays);
+
+				findClosestTrianglesKernel.setArg(0, primaryRaysBuffer);
+				findClosestTrianglesKernel.setArg(1, numRays);
+
+				detectShadowWithTriangles.setArg(0, primaryRaysBuffer);
+				detectShadowWithTriangles.setArg(1, numRays);
+
+				dumpImageKernel.setArg(0, accumulationBuffer);
+				dumpImageKernel.setArg(1, primaryRaysBuffer);
+				dumpImageKernel.setArg(2, renderbuffer);
+		
+				local_ws = 16;
+				global_wsx = leastMultiple(windowWidth, local_ws);
+				global_wsy = leastMultiple(windowHeight, local_ws);
+		
+				accumulateColorKernel.setArg(0, accumulationBuffer);
+				accumulateColorKernel.setArg(1, primaryRaysBuffer);
+				accumulateColorKernel.setArg(2, numRays);
+				
+				camera.setScreenRatio((float)windowWidth / (float)windowHeight);
 			}
 
 			double deltaTime = dSec(currentTime - prevTime).count();
@@ -822,7 +859,7 @@ int main(int argc, char** argv)
 
 			for (unsigned int j = 0; j < numBounces; j++)
 			{
-				intersectSpheresEvents.push_back(runKernel(queue, findClosestSpheresKernel, cl::NDRange(numRays), cl::NDRange(32), events));
+				intersectSpheresEvents.push_back(runKernel(queue, findClosestSpheresKernel, cl::NDRange(leastMultiple(numRays, 32)), cl::NDRange(32), events));
 
 				for (unsigned int k = 0; k < NUM_MODELS; k++)
 				{
@@ -831,16 +868,16 @@ int main(int argc, char** argv)
 						findClosestTrianglesKernel.setArg(2, objTransformedModels[k]);
 						findClosestTrianglesKernel.setArg(3, objModels[k].GetVertexCount() / 3);
 						findClosestTrianglesKernel.setArg(6, k + 1);
-						triangleEvents.push_back(runKernel(queue, findClosestTrianglesKernel, cl::NDRange(numRays), cl::NDRange(32), events));
+						triangleEvents.push_back(runKernel(queue, findClosestTrianglesKernel, cl::NDRange(leastMultiple(numRays, 32)), cl::NDRange(32), events));
 					}
 				}
-				moveRaysEvents.push_back(runKernel(queue, moveRaysToIntersectionKernel, cl::NDRange(numRays), cl::NDRange(32), events));
+				moveRaysEvents.push_back(runKernel(queue, moveRaysToIntersectionKernel, cl::NDRange(leastMultiple(numRays, 32)), cl::NDRange(32), events));
 
 				for (unsigned int i = 0; i < numLights; i++)
 				{
 					updateRaysToLightKernel.setArg(3, i);
-					updateRaysToLights.push_back(runKernel(queue, updateRaysToLightKernel, cl::NDRange(numRays), cl::NDRange(32), events));
-					sphereShadowEvents.push_back(runKernel(queue, detectShadowWithSpheres, cl::NDRange(numRays), cl::NDRange(32), events));
+					updateRaysToLights.push_back(runKernel(queue, updateRaysToLightKernel, cl::NDRange(leastMultiple(numRays, 32)), cl::NDRange(32), events));
+					sphereShadowEvents.push_back(runKernel(queue, detectShadowWithSpheres, cl::NDRange(leastMultiple(numRays, 32)), cl::NDRange(32), events));
 					for (unsigned int k = 0; k < NUM_MODELS; k++)
 					{
 						if (showModels[k])
@@ -848,12 +885,12 @@ int main(int argc, char** argv)
 							detectShadowWithTriangles.setArg(2, objTransformedModels[k]);
 							detectShadowWithTriangles.setArg(3, objModels[k].GetVertexCount() / 3);
 							detectShadowWithTriangles.setArg(4, k + 1);
-							triangleShadowEvents.push_back(runKernel(queue, detectShadowWithTriangles, cl::NDRange(numRays), cl::NDRange(32), events));
+							triangleShadowEvents.push_back(runKernel(queue, detectShadowWithTriangles, cl::NDRange(leastMultiple(numRays, 32)), cl::NDRange(32), events));
 						}
 					}
 
 					accumulateColorKernel.setArg(4, i);
-					accumulateColorEvents.push_back(runKernel(queue, accumulateColorKernel, cl::NDRange(numRays), cl::NDRange(32), events));
+					accumulateColorEvents.push_back(runKernel(queue, accumulateColorKernel, cl::NDRange(leastMultiple(numRays, 32)), cl::NDRange(32), events));
 				}
 			}
 
