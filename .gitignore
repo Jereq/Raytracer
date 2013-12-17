@@ -44,3 +44,4 @@ ipch/
 *.vspx
 
 testCaseCollection.xml
+*.csv

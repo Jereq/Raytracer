@@ -16,6 +16,7 @@
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <sstream>
 #include <thread>
 #include <vector>
 
@@ -510,19 +511,79 @@ void incTime(const std::string& _name, const std::vector<cl::Event>& _events)
 	}
 }
 
+std::ofstream logFile;
+
+void openLogFile()
+{
+	if (logFile.is_open())
+		logFile.close();
+	
+	time_t currTime = time(nullptr);
+#pragma warning (suppress : 4996)
+	tm* currentLocalTime = localtime(&currTime);
+
+	std::ostringstream filename;
+	filename << "GPU_usage_log_" << std::put_time(currentLocalTime, "%H+%M+%S") << ".csv"; 
+	logFile.open(filename.str());
+}
+
+void printLogFileHeader()
+{
+	if (timers.empty())
+		return;
+
+	logFile << "ScreenWidth,ScreenHeight";
+
+	for (unsigned int i = 0; i < timers.size(); i++)
+	{
+		logFile << ',' << timers[i].first;
+	}
+
+	logFile << std::endl;
+}
+
+void printTimerToConsole(const std::pair<std::string, uint64_t>& _timer, double _deltaTime)
+{
+	std::cout << std::left << std::setw(widestName) << _timer.first << ": " << std::right << std::setw(5) << toSeconds(_timer.second) * 100.0 / _deltaTime << "%" << std::endl;
+}
+
+void printSettingsToLogFile()
+{
+	logFile << windowWidth << "," << windowHeight;
+}
+
 void printTimersAndReset()
 {
 	auto currentTime = std::chrono::high_resolution_clock::now();
 	auto deltaTime = currentTime - prevTimingPoint;
 	prevTimingPoint = currentTime;
-
+	
 	double d_deltaTime = std::chrono::duration<double>(deltaTime).count();
 
-	for (auto& val : timers)
+	if (timers.empty())
+		return;
+
+	if (!logFile.is_open())
 	{
-		std::cout << std::left << std::setw(widestName) << val.first << ": " << std::right << std::setw(5) << toSeconds(val.second) * 100.0 / d_deltaTime << "%" << std::endl;
+		openLogFile();
+		printLogFileHeader();
+	}
+
+	printSettingsToLogFile();
+
+	for (unsigned int i = 0; i < timers.size(); i++)
+	{
+		auto& val = timers[i];
+
+		printTimerToConsole(timers[i], d_deltaTime);
+		logFile << ',' << toSeconds(val.second);
+		
 		val.second = 0;
 	}
+
+	logFile << std::endl;
+	
+	logFile.flush();
 }
 
 cl::Event runKernel(const cl::CommandQueue& queue, const cl::Kernel& kernel, const cl::NDRange& globalSize, const cl::NDRange& groupSize, std::vector<cl::Event>& events)
@@ -721,6 +782,7 @@ int main(int argc, char** argv)
 				window.setTitle(WINDOW_TITLE + " | FPS: " + std::to_string((int)(frames / MEASURE_TIME_D)));
 				std::cout << "FPS: " << std::fixed << std::setprecision(1) << frames / MEASURE_TIME_D << ", " << std::setprecision(2) << 1000.0 * MEASURE_TIME_D / frames << " ms/F" << std::endl;
 				printTimersAndReset();
+				//logUsageToFile();
 				std::cout << std::endl;
 
 				frames = 0;
