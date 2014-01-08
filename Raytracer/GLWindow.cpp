@@ -172,3 +172,8 @@ bool GLWindow::shouldClose() const
 {
 	return glfwWindowShouldClose(window) || (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS);
 }
+
+void GLWindow::setWindowSize(int _width, int _height)
+{
+	glfwSetWindowSize(window, _width, _height);
+}

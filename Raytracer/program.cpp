@@ -215,31 +215,6 @@ cl::Program createProgramFromFile(cl::Context& _context, std::vector<cl::Device>
 	return program;
 }
 
-void runImageKernel(cl::CommandQueue& _queue, cl::Kernel& _kernel, cl::BufferRenderGL& _renderbuffer, cl::Buffer& _rays,
-					cl::Buffer& _lights, int _lightIdx, int _width, int _height, std::vector<cl::Event>* _events, cl::Event* _outEvent)
-{
-	//std::cout << "Setting kernel arguments..." << std::endl;
-
-	_kernel.setArg(0, _renderbuffer);
-	_kernel.setArg(1, _rays);
-	_kernel.setArg(2, _lights);
-	_kernel.setArg(3, _lightIdx);
-
-	//std::cout << "Starting kernel..." << std::endl;
-
-	size_t local_ws = 16;
-	size_t global_wsx = ((_width + local_ws - 1) / local_ws) * local_ws;
-	size_t global_wsy = ((_height + local_ws - 1) / local_ws) * local_ws;
-
-	_queue.enqueueNDRangeKernel(
-		_kernel,
-		cl::NullRange,
-		cl::NDRange(global_wsx, global_wsy),
-		cl::NDRange(local_ws, local_ws),
-		_events,
-		_outEvent);
-}
-
 std::ostream& operator<<(std::ostream& _in, const glm::vec4& _vec)
 {
 	return _in << "(" << _vec.x << ", " << _vec.y << ", " << _vec.z << ", " << _vec.w << ")";
@@ -700,6 +675,105 @@ cl::Event runKernel(const cl::CommandQueue& queue, const cl::Kernel& kernel, con
 unsigned int leastMultiple(unsigned int _val, unsigned int _mul)
 {
 	return ((_val + _mul - 1) / _mul) * _mul;
+}
+
+struct TestSetting
+{
+	unsigned int threads;
+	unsigned int width;
+	unsigned int height;
+	unsigned int bounces;
+	unsigned int lights;
+	unsigned int triangles;
+};
+
+bool modelSetups[][NUM_MODELS] =
+{
+	{true, false, false, true, true},
+	{false},
+	{true},
+	{true, true},
+	{true, true, true},
+	{true, false, false, false, true},
+	{true, false, false, false, false, true},
+	{true, false, false, false, false, false, true},
+	{true, false, false, false, false, false, false, true},
+	{true, false, false, true},
+};
+
+TestSetting testSettings[] =
+{
+	{32, 1024, 768, 4, 2, 0},
+	{64, 1024, 768, 4, 2, 0},
+	{128, 1024, 768, 4, 2, 0},
+	{256, 1024, 768, 4, 2, 0},
+
+	{32, 640,  480, 4, 2, 0},
+	{64,  640, 480, 4, 2, 0},
+	{128, 640, 480, 4, 2, 0},
+	{256, 640, 480, 4, 2, 0},
+
+	{128, 32, 32, 4, 2, 0},
+	{128, 800, 600, 4, 2, 0},
+	{128, 1024, 768, 4, 2, 0},
+	{128, 1280, 1024, 4, 2, 0},
+
+	{128, 1024, 768, 0, 2, 0},
+	{128, 1024, 768, 1, 2, 0},
+	{128, 1024, 768, 2, 2, 0},
+	{128, 1024, 768, 3, 2, 0},
+	{128, 1024, 768, 4, 2, 0},
+	{128, 1024, 768, 5, 2, 0},
+	{128, 1024, 768, 6, 2, 0},
+	{128, 1024, 768, 7, 2, 0},
+	{128, 1024, 768, 8, 2, 0},
+	{128, 1024, 768, 9, 2, 0},
+	{128, 1024, 768, 10, 2, 0},
+	{128, 1024, 768, 100, 2, 0},
+
+	{128, 1024, 768, 4, 1, 0},
+	{128, 1024, 768, 4, 2, 0},
+	{128, 1024, 768, 4, 3, 0},
+	{128, 1024, 768, 4, 4, 0},
+	{128, 1024, 768, 4, 7, 0},
+	{128, 1024, 768, 4, 10, 0},
+
+	{128, 1024, 768, 4, 2, 1},
+	{128, 1024, 768, 4, 2, 2},
+	{128, 1024, 768, 4, 2, 3},
+	{128, 1024, 768, 4, 2, 4},
+	{128, 1024, 768, 4, 2, 5},
+	{128, 1024, 768, 4, 2, 6},
+	{128, 800, 600, 4, 2, 2},
+	{128, 800, 600, 4, 2, 9},
+	{128, 800, 600, 4, 2, 5},
+	{128, 800, 600, 4, 2, 6},
+	{128, 800, 600, 4, 2, 7},
+	{128, 800, 600, 4, 2, 8},
+};
+
+bool shouldChangeWindowSize = false;
+
+void useSettings(const TestSetting& setting)
+{
+	threadGroupSize = setting.threads;
+	local2D = cl::NDRange(32, threadGroupSize / 32);
+	linearLocalSize = cl::NDRange(threadGroupSize);
+			
+	updateSetting("Local2DSize", std::to_string(local2D[0]) + "x" + std::to_string(local2D[1]));
+	updateSetting("LocalLinearSize", std::to_string(linearLocalSize[0]));
+
+	windowWidth = setting.width;
+	windowHeight = setting.height;
+	shouldChangeWindowSize = true;
+
+	numBounces = setting.bounces;
+	updateSetting("NumBounces", std::to_string(numBounces));
+
+	numLights = setting.lights;
+	updateSetting("NumLights", std::to_string(numLights));
+
+
 }
 
 int main(int argc, char** argv)

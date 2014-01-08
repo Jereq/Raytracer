@@ -39,6 +39,6 @@ public:
 	void setFramebufferSizeCallback(GLFWframebuffersizefun _func);
 
 	void setTitle(const std::string& _title);
-
 	bool shouldClose() const;
+	void setWindowSize(int _width, int _height);
 };
