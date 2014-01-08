@@ -326,6 +326,31 @@ const glm::vec3 modelRotationSpeeds[NUM_MODELS] = {
 };
 
 bool showModels[NUM_MODELS] = {true};
+unsigned int modelTriangleCount[NUM_MODELS];
+
+void updateSetting(const std::string& _name, const std::string& _value);
+
+void updateModelCount()
+{
+	unsigned int numModels = 0;
+	unsigned int numTriangles = 0;
+
+	for (unsigned int i = 0; i < NUM_MODELS; i++)
+	{
+		if (showModels[i])
+		{
+			numModels++;
+			numTriangles += modelTriangleCount[i];
+		}
+	}
+
+	updateSetting("NumModels", std::to_string(numModels));
+	updateSetting("NumTriangles", std::to_string(numTriangles));
+}
+
+unsigned int threadGroupSize = 32;
+cl::NDRange local2D(32, 1);
+cl::NDRange linearLocalSize(32);
 
 void keyCallback(GLFWwindow* _window, int _key, int _scanCode, int _action, int _mod)
 {
@@ -361,6 +386,8 @@ void keyCallback(GLFWwindow* _window, int _key, int _scanCode, int _action, int 
 			numLights++;
 			if (numLights > MAX_LIGHTS)
 				numLights = MAX_LIGHTS;
+
+			updateSetting("NumLights", std::to_string(numLights));
 		}
 		break;
 
@@ -370,6 +397,8 @@ void keyCallback(GLFWwindow* _window, int _key, int _scanCode, int _action, int 
 			numLights--;
 			if (numLights < 1)
 				numLights = 1;
+
+			updateSetting("NumLights", std::to_string(numLights));
 		}
 		break;
 
@@ -377,6 +406,8 @@ void keyCallback(GLFWwindow* _window, int _key, int _scanCode, int _action, int 
 		if (_action == GLFW_PRESS)
 		{
 			numBounces++;
+
+			updateSetting("NumBounces", std::to_string(numBounces));
 		}
 		break;
 
@@ -385,6 +416,8 @@ void keyCallback(GLFWwindow* _window, int _key, int _scanCode, int _action, int 
 		{
 			if (numBounces > 1)
 				numBounces--;
+
+			updateSetting("NumBounces", std::to_string(numBounces));
 		}
 		break;
 
@@ -410,11 +443,45 @@ void keyCallback(GLFWwindow* _window, int _key, int _scanCode, int _action, int 
 		}
 		break;
 
+	case GLFW_KEY_U:
+		if (_action == GLFW_PRESS)
+		{
+			static const unsigned int maxThreadGroupSize = 256;
+			if (threadGroupSize < maxThreadGroupSize)
+			{
+				threadGroupSize *= 2;
+				local2D = cl::NDRange(32, threadGroupSize / 32);
+				linearLocalSize = cl::NDRange(threadGroupSize);
+			
+				updateSetting("Local2DSize", std::to_string(local2D[0]) + "x" + std::to_string(local2D[1]));
+				updateSetting("LocalLinearSize", std::to_string(linearLocalSize[0]));
+			}
+		}
+		break;
+
+	case GLFW_KEY_J:
+		if (_action == GLFW_PRESS)
+		{
+			static const unsigned int minThreadGroupSize = 32;
+			if (threadGroupSize > minThreadGroupSize)
+			{
+				threadGroupSize /= 2;
+				local2D = cl::NDRange(32, threadGroupSize / 32);
+				linearLocalSize = cl::NDRange(threadGroupSize);
+			
+				updateSetting("Local2DSize", std::to_string(local2D[0]) + "x" + std::to_string(local2D[1]));
+				updateSetting("LocalLinearSize", std::to_string(linearLocalSize[0]));
+			}
+		}
+		break;
+
 	default:
 		if (_key >= GLFW_KEY_1 && _key < GLFW_KEY_1 + NUM_MODELS && _action == GLFW_PRESS)
 		{
 			int model = _key - GLFW_KEY_1;
 			showModels[model] = !showModels[model];
+
+			updateModelCount();
 		}
 	}
 }
@@ -473,6 +540,7 @@ void glErr()
 }
 
 std::vector<std::pair<std::string, uint64_t>> timers;
+std::vector<std::pair<std::string, std::string>> settings;
 unsigned int widestName = 0;
 std::chrono::high_resolution_clock::time_point prevTimingPoint;
 
@@ -503,6 +571,30 @@ void incTime(const std::string& _name, uint64_t _nanoSeconds)
 	registerTimer(_name, _nanoSeconds);
 }
 
+void incTime(const std::string& _name, const std::chrono::system_clock::duration& _duration)
+{
+	incTime(_name, std::chrono::duration_cast<std::chrono::nanoseconds>(_duration).count());
+}
+
+void updateSetting(const std::string& _name, const std::string& _value)
+{
+	for (auto& val : settings)
+	{
+		if (val.first == _name)
+		{
+			val.second = _value;
+			return;
+		}
+	}
+
+	settings.push_back(std::make_pair(_name, _value));
+}
+
+void updateSetting(const std::string& _name, float _value)
+{
+	updateSetting(_name, std::to_string(_value));
+}
+
 void incTime(const std::string& _name, const std::vector<cl::Event>& _events)
 {
 	for (const cl::Event& ev : _events)
@@ -529,10 +621,14 @@ void openLogFile()
 
 void printLogFileHeader()
 {
-	if (timers.empty())
+	if (settings.empty())
 		return;
 
-	logFile << "ScreenWidth,ScreenHeight";
+	logFile << settings[0].first;
+	for (unsigned int i = 1; i < settings.size(); i++)
+	{
+		logFile << ',' << settings[i].first;
+	}
 
 	for (unsigned int i = 0; i < timers.size(); i++)
 	{
@@ -549,7 +645,14 @@ void printTimerToConsole(const std::pair<std::string, uint64_t>& _timer, double 
 
 void printSettingsToLogFile()
 {
-	logFile << windowWidth << "," << windowHeight;
+	if (settings.empty())
+		return;
+
+	logFile << settings[0].second;
+	for (unsigned int i = 1; i < settings.size(); i++)
+	{
+		logFile << ',' << settings[i].second;
+	}
 }
 
 void printTimersAndReset()
@@ -614,6 +717,8 @@ int main(int argc, char** argv)
 	const static std::chrono::system_clock::duration MEASURE_TIME(std::chrono::seconds(5));
 	const static double MEASURE_TIME_D = std::chrono::duration_cast<std::chrono::duration<double>>(MEASURE_TIME).count();
 
+	updateSetting("NumBounces", (float)numBounces);
+	updateSetting("NumLights", (float)numLights);
 	
 	try
 	{
@@ -756,22 +861,25 @@ int main(int argc, char** argv)
 		for (unsigned int i = 0; i < NUM_MODELS; i++)
 		{
 			objModels[i].Initialize(context, modelNames[i].c_str());
+			modelTriangleCount[i] = objModels[i].GetVertexCount() / 3;
 			objTransformedModels[i] = cl::Buffer(context, CL_MEM_READ_ONLY, objModels[i].GetVertexCount() * sizeof(ObjModel::VertexType));
 		}
+		updateModelCount();
 
 		findClosestTrianglesKernel.setArg(5, diffuseTexture);
 		
-		cl::NDRange local2D(32, 8);
 		cl::NDRange global2D;
-
-		cl::NDRange linearLocalSize(32);
 		cl::NDRange linearGlobalSize;
+
+		updateSetting("Local2DSize", std::to_string(local2D[0]) + "x" + std::to_string(local2D[1]));
+		updateSetting("LocalLinearSize", std::to_string(linearLocalSize[0]));
 		
 		accumulateColorKernel.setArg(3, lightBuffer);
 
 		while (!window.shouldClose())
 		{
 			frames++;
+			updateSetting("NumFrames", (float)frames);
 
 			prevTime = currentTime;
 			currentTime = std::chrono::high_resolution_clock::now();
@@ -782,7 +890,6 @@ int main(int argc, char** argv)
 				window.setTitle(WINDOW_TITLE + " | FPS: " + std::to_string((int)(frames / MEASURE_TIME_D)));
 				std::cout << "FPS: " << std::fixed << std::setprecision(1) << frames / MEASURE_TIME_D << ", " << std::setprecision(2) << 1000.0 * MEASURE_TIME_D / frames << " ms/F" << std::endl;
 				printTimersAndReset();
-				//logUsageToFile();
 				std::cout << std::endl;
 
 				frames = 0;
@@ -793,6 +900,9 @@ int main(int argc, char** argv)
 				sizeChanged = false;
 
 				window.updateFramebuffer(windowWidth, windowHeight);
+
+				updateSetting("WindowWidth", (float)windowWidth);
+				updateSetting("WindowHeight", (float)windowHeight);
 
 				renderbuffer = cl::BufferRenderGL(context, CL_MEM_READ_WRITE, window.getRenderbuffer());
 
@@ -841,6 +951,7 @@ int main(int argc, char** argv)
 				camera.setScreenRatio((float)windowWidth / (float)windowHeight);
 			}
 
+			incTime("Duration", currentTime - prevTime);
 			double deltaTime = dSec(currentTime - prevTime).count();
 			if (dir != glm::vec2(0.f))
 			{
@@ -982,9 +1093,9 @@ int main(int argc, char** argv)
 			incTime("Accumulate colors", accumulateColorEvents);
 			incTime("Dump image", getExecutionTime(dumpEvent));
 
-			incTime("Total OpenCL", std::chrono::duration_cast<std::chrono::nanoseconds>(drawStart - startCL).count());
-			incTime("OpenCL enqueue work", std::chrono::duration_cast<std::chrono::nanoseconds>(endCL - startCL).count());
-			incTime("OpenGL blit and swap", std::chrono::duration_cast<std::chrono::nanoseconds>(drawEnd - drawStart).count());
+			incTime("Total OpenCL", drawStart - startCL);
+			incTime("OpenCL enqueue work", endCL - startCL);
+			incTime("OpenGL blit and swap", drawEnd - drawStart);
 		}
 	}
 	catch (const cl::Error& err)
