@@ -923,10 +923,6 @@ int main(int argc, char** argv)
 
 				detectShadowWithSpheres.setArg(0, primaryRaysBuffer);
 				detectShadowWithSpheres.setArg(1, numRays);
-				
-				global2D = cl::NDRange(leastMultiple(windowWidth, local2D[0]), leastMultiple(windowHeight, local2D[1]));
-
-				linearGlobalSize = cl::NDRange(leastMultiple(numRays, linearLocalSize[0]));
 
 				updateRaysToLightKernel.setArg(0, primaryRaysBuffer);
 				updateRaysToLightKernel.setArg(1, numRays);
@@ -950,6 +946,9 @@ int main(int argc, char** argv)
 				
 				camera.setScreenRatio((float)windowWidth / (float)windowHeight);
 			}
+				
+			global2D = cl::NDRange(leastMultiple(windowWidth, local2D[0]), leastMultiple(windowHeight, local2D[1]));
+			linearGlobalSize = cl::NDRange(leastMultiple(numRays, linearLocalSize[0]));
 
 			incTime("Duration", currentTime - prevTime);
 			double deltaTime = dSec(currentTime - prevTime).count();
