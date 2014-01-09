@@ -22,6 +22,118 @@
 
 #include "ObjModel.h"
 
+std::string modelNames[] = {
+	"resources/cubeInv.obj",
+	"resources/cube.obj",
+	"resources/12 tri.obj",
+	"resources/48 tri.obj",
+	"resources/192 tri.obj",
+	"resources/768 tri.obj",
+	"resources/3072 tri.obj",
+	"resources/bth.obj",
+};
+const int NUM_MODELS = sizeof(modelNames) / sizeof(std::string);
+
+struct TestSetting
+{
+	unsigned int threads;
+	unsigned int width;
+	unsigned int height;
+	unsigned int bounces;
+	unsigned int lights;
+	unsigned int triangles;
+};
+
+bool modelSetups[][NUM_MODELS] =
+{
+	{true, false, false, true, true},
+	{false},
+	{true},
+	{true, true},
+	{true, true, true},
+	{true, false, false, false, true},
+	{true, false, false, false, false, true},
+	{true, false, false, false, false, false, true},
+	{true, false, false, false, false, false, false, true},
+	{true, false, false, true},
+};
+
+TestSetting defaultSetting = { 32, 1024, 768, 1, 1, 0 };
+
+TestSetting testSettings[] =
+{
+	{32, 1024, 768, 4, 2, 0},
+	{64, 1024, 768, 4, 2, 0},
+	{128, 1024, 768, 4, 2, 0},
+	{256, 1024, 768, 4, 2, 0},
+
+	{32, 640,  480, 4, 2, 0},
+	{64,  640, 480, 4, 2, 0},
+	{128, 640, 480, 4, 2, 0},
+	{256, 640, 480, 4, 2, 0},
+
+	{128, 128, 128, 4, 2, 0},
+	{128, 800, 600, 4, 2, 0},
+	{128, 1024, 768, 4, 2, 0},
+	{128, 1280, 1024, 4, 2, 0},
+
+	{128, 1024, 768, 0, 2, 0},
+	{128, 1024, 768, 1, 2, 0},
+	{128, 1024, 768, 2, 2, 0},
+	{128, 1024, 768, 3, 2, 0},
+	{128, 1024, 768, 4, 2, 0},
+	{128, 1024, 768, 5, 2, 0},
+	{128, 1024, 768, 6, 2, 0},
+	{128, 1024, 768, 7, 2, 0},
+	{128, 1024, 768, 8, 2, 0},
+	{128, 1024, 768, 9, 2, 0},
+	{128, 1024, 768, 10, 2, 0},
+	{128, 1024, 768, 100, 2, 0},
+
+	{128, 1024, 768, 4, 1, 0},
+	{128, 1024, 768, 4, 2, 0},
+	{128, 1024, 768, 4, 3, 0},
+	{128, 1024, 768, 4, 4, 0},
+	{128, 1024, 768, 4, 7, 0},
+	{128, 1024, 768, 4, 10, 0},
+
+	{128, 1024, 768, 4, 2, 1},
+	{128, 1024, 768, 4, 2, 2},
+	{128, 1024, 768, 4, 2, 3},
+	{128, 1024, 768, 4, 2, 4},
+	{128, 1024, 768, 4, 2, 5},
+	{128, 1024, 768, 4, 2, 6},
+	{128, 320, 240, 4, 2, 2},
+	{128, 320, 240, 4, 2, 9},
+	{128, 320, 240, 4, 2, 5},
+	{128, 320, 240, 4, 2, 6},
+	{128, 320, 240, 4, 2, 7},
+	{128, 320, 240, 4, 2, 8},
+};
+static const unsigned int numTests = sizeof(testSettings) / sizeof(TestSetting);
+
+bool runningTests = false;
+const float timePerTest = 10.f;
+const float timeBeforeTest = 1.f;
+float timeLeftInTest;
+unsigned int currentTest = 0;
+bool beforeTest;
+
+std::ofstream logFile;
+void useSettings(const TestSetting& setting);
+
+void startTests()
+{
+	runningTests = true;
+	currentTest = 0;
+	timeLeftInTest = timeBeforeTest;
+	beforeTest = true;
+
+	useSettings(testSettings[0]);
+
+	logFile.close();
+}
+
 void printPlatformInfo(cl::Platform& plat)
 {
 	std::string profile = plat.getInfo<CL_PLATFORM_PROFILE>();
@@ -255,17 +367,6 @@ unsigned int numLights = 1;
 unsigned int numBounces = 1;
 float cubeReflect = 0.5f;
 float cubeReflectStep = 0.1f;
-std::string modelNames[] = {
-	"resources/cubeInv.obj",
-	"resources/cube.obj",
-	"resources/12 tri.obj",
-	"resources/48 tri.obj",
-	"resources/192 tri.obj",
-	"resources/768 tri.obj",
-	"resources/3072 tri.obj",
-	"resources/bth.obj",
-};
-const int NUM_MODELS = sizeof(modelNames) / sizeof(std::string);
 
 const glm::vec3 modelPositions[NUM_MODELS] = {
 	glm::vec3(0.f, 0.f, 0.f),
@@ -327,8 +428,13 @@ unsigned int threadGroupSize = 32;
 cl::NDRange local2D(32, 1);
 cl::NDRange linearLocalSize(32);
 
+void useSettings(const TestSetting& setting);
+
 void keyCallback(GLFWwindow* _window, int _key, int _scanCode, int _action, int _mod)
 {
+	if (runningTests)
+		return;
+
 	float forward;
 	if (_action == GLFW_PRESS)
 		forward = 1.f;
@@ -450,6 +556,13 @@ void keyCallback(GLFWwindow* _window, int _key, int _scanCode, int _action, int 
 		}
 		break;
 
+	case GLFW_KEY_M:
+		if (_action == GLFW_PRESS)
+		{
+			startTests();
+		}
+		break;
+
 	default:
 		if (_key >= GLFW_KEY_1 && _key < GLFW_KEY_1 + NUM_MODELS && _action == GLFW_PRESS)
 		{
@@ -463,6 +576,9 @@ void keyCallback(GLFWwindow* _window, int _key, int _scanCode, int _action, int 
 
 void cursorPosCallback(GLFWwindow* _window, double _xPos, double _yPos)
 {
+	if (runningTests)
+		return;
+
 	double deltaX = _xPos - prevXPos;
 	double deltaY = _yPos - prevYPos;
 	prevXPos = _xPos;
@@ -578,8 +694,6 @@ void incTime(const std::string& _name, const std::vector<cl::Event>& _events)
 	}
 }
 
-std::ofstream logFile;
-
 void openLogFile()
 {
 	if (logFile.is_open())
@@ -653,7 +767,10 @@ void printTimersAndReset()
 	{
 		auto& val = timers[i];
 
-		printTimerToConsole(timers[i], d_deltaTime);
+		if (!runningTests)
+		{
+			printTimerToConsole(timers[i], d_deltaTime);
+		}
 		logFile << ',' << toSeconds(val.second);
 		
 		val.second = 0;
@@ -662,6 +779,14 @@ void printTimersAndReset()
 	logFile << std::endl;
 	
 	logFile.flush();
+}
+
+void resetTimers()
+{
+	for (auto& timer : timers)
+	{
+		timer.second = 0;
+	}
 }
 
 cl::Event runKernel(const cl::CommandQueue& queue, const cl::Kernel& kernel, const cl::NDRange& globalSize, const cl::NDRange& groupSize, std::vector<cl::Event>& events)
@@ -676,81 +801,6 @@ unsigned int leastMultiple(unsigned int _val, unsigned int _mul)
 {
 	return ((_val + _mul - 1) / _mul) * _mul;
 }
-
-struct TestSetting
-{
-	unsigned int threads;
-	unsigned int width;
-	unsigned int height;
-	unsigned int bounces;
-	unsigned int lights;
-	unsigned int triangles;
-};
-
-bool modelSetups[][NUM_MODELS] =
-{
-	{true, false, false, true, true},
-	{false},
-	{true},
-	{true, true},
-	{true, true, true},
-	{true, false, false, false, true},
-	{true, false, false, false, false, true},
-	{true, false, false, false, false, false, true},
-	{true, false, false, false, false, false, false, true},
-	{true, false, false, true},
-};
-
-TestSetting testSettings[] =
-{
-	{32, 1024, 768, 4, 2, 0},
-	{64, 1024, 768, 4, 2, 0},
-	{128, 1024, 768, 4, 2, 0},
-	{256, 1024, 768, 4, 2, 0},
-
-	{32, 640,  480, 4, 2, 0},
-	{64,  640, 480, 4, 2, 0},
-	{128, 640, 480, 4, 2, 0},
-	{256, 640, 480, 4, 2, 0},
-
-	{128, 32, 32, 4, 2, 0},
-	{128, 800, 600, 4, 2, 0},
-	{128, 1024, 768, 4, 2, 0},
-	{128, 1280, 1024, 4, 2, 0},
-
-	{128, 1024, 768, 0, 2, 0},
-	{128, 1024, 768, 1, 2, 0},
-	{128, 1024, 768, 2, 2, 0},
-	{128, 1024, 768, 3, 2, 0},
-	{128, 1024, 768, 4, 2, 0},
-	{128, 1024, 768, 5, 2, 0},
-	{128, 1024, 768, 6, 2, 0},
-	{128, 1024, 768, 7, 2, 0},
-	{128, 1024, 768, 8, 2, 0},
-	{128, 1024, 768, 9, 2, 0},
-	{128, 1024, 768, 10, 2, 0},
-	{128, 1024, 768, 100, 2, 0},
-
-	{128, 1024, 768, 4, 1, 0},
-	{128, 1024, 768, 4, 2, 0},
-	{128, 1024, 768, 4, 3, 0},
-	{128, 1024, 768, 4, 4, 0},
-	{128, 1024, 768, 4, 7, 0},
-	{128, 1024, 768, 4, 10, 0},
-
-	{128, 1024, 768, 4, 2, 1},
-	{128, 1024, 768, 4, 2, 2},
-	{128, 1024, 768, 4, 2, 3},
-	{128, 1024, 768, 4, 2, 4},
-	{128, 1024, 768, 4, 2, 5},
-	{128, 1024, 768, 4, 2, 6},
-	{128, 800, 600, 4, 2, 2},
-	{128, 800, 600, 4, 2, 9},
-	{128, 800, 600, 4, 2, 5},
-	{128, 800, 600, 4, 2, 6},
-	{128, 800, 600, 4, 2, 7},
-	{128, 800, 600, 4, 2, 8},
-};
 
 bool shouldChangeWindowSize = false;
 
@@ -773,7 +823,48 @@ void useSettings(const TestSetting& setting)
 	numLights = setting.lights;
 	updateSetting("NumLights", std::to_string(numLights));
 
+	bool* modelSetup = modelSetups[setting.triangles];
+	for (unsigned int i = 0; i < NUM_MODELS; ++i)
+	{
+		showModels[i] = modelSetup[i];
+	}
 
+	updateModelCount();
+}
+
+int frames = 0;
+
+void runTests(float _deltaTime)
+{
+	timeLeftInTest -= _deltaTime;
+	if (timeLeftInTest <= 0.f)
+	{
+		if (beforeTest)
+		{
+			timeLeftInTest = timePerTest;
+			beforeTest = false;
+
+			resetTimers();
+			frames = 0;
+		}
+		else
+		{
+			currentTest++;
+			if (currentTest >= numTests)
+			{
+				runningTests = false;
+				useSettings(defaultSetting);
+				logFile.close();
+
+				return;
+			}
+
+			printTimersAndReset();
+			useSettings(testSettings[currentTest]);
+			timeLeftInTest = timeBeforeTest;
+			beforeTest = true;
+		}
+	}
 }
 
 int main(int argc, char** argv)
@@ -926,7 +1017,6 @@ int main(int argc, char** argv)
 		auto currentTime = std::chrono::high_resolution_clock::now();
 		auto prevTime = currentTime;
 		auto prevPrint = currentTime;
-		int frames = 0;
 		initTimer();
 
 		ObjModel objModels[NUM_MODELS];
@@ -958,7 +1048,14 @@ int main(int argc, char** argv)
 			prevTime = currentTime;
 			currentTime = std::chrono::high_resolution_clock::now();
 
-			if (currentTime - prevPrint > MEASURE_TIME)
+			incTime("Duration", currentTime - prevTime);
+			double deltaTime = dSec(currentTime - prevTime).count();
+
+			if (runningTests)
+			{
+				runTests((float)deltaTime);
+			}
+			else if (currentTime - prevPrint > MEASURE_TIME)
 			{
 				prevPrint += MEASURE_TIME;
 				window.setTitle(WINDOW_TITLE + " | FPS: " + std::to_string((int)(frames / MEASURE_TIME_D)));
@@ -967,6 +1064,12 @@ int main(int argc, char** argv)
 				std::cout << std::endl;
 
 				frames = 0;
+			}
+
+			if (shouldChangeWindowSize)
+			{
+				window.setWindowSize(windowWidth, windowHeight);
+				shouldChangeWindowSize = false;
 			}
 
 			if (sizeChanged)
@@ -1024,8 +1127,6 @@ int main(int argc, char** argv)
 			global2D = cl::NDRange(leastMultiple(windowWidth, local2D[0]), leastMultiple(windowHeight, local2D[1]));
 			linearGlobalSize = cl::NDRange(leastMultiple(numRays, linearLocalSize[0]));
 
-			incTime("Duration", currentTime - prevTime);
-			double deltaTime = dSec(currentTime - prevTime).count();
 			if (dir != glm::vec2(0.f))
 			{
 				glm::vec2 velocity = glm::normalize(dir) * (float)(speed * deltaTime);
