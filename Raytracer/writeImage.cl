@@ -51,11 +51,22 @@ __kernel void accumulateImage(__global float4* _accumulationBuffer, __global Ray
 	_rays[id].distance = INFINITY;
 }
 
-__kernel void dumpImage(__global float4* _accumulationBuffer, __global Ray* _rays, __write_only image2d_t _image)
+__kernel void dumpImage(__global float4* _accumulationBuffer, __global Ray* _rays, __write_only image2d_t _image, int _superSampling)
 {
 	int2 pos = {get_global_id(0), get_global_id(1)};
 	if (pos.x >= get_image_width(_image) || pos.y >= get_image_height(_image))
 		return;
 
-	write_imagef(_image, pos, clamp(_accumulationBuffer[pos.x + get_image_width(_image) * pos.y], 0.f, 1.f));
+	float4 color = {0.f, 0.f, 0.f, 0.f};
+
+	for (int i = 0; i < _superSampling; ++i)
+	{
+		int rowOffset = get_image_width(_image) * _superSampling * (pos.y * _superSampling + i);
+		for (int j = 0; j < _superSampling; ++j)
+		{
+			color += clamp(_accumulationBuffer[rowOffset + (pos.x * _superSampling + j)], 0.f, 1.f);
+		}
+	}
+
+	write_imagef(_image, pos, color / (_superSampling * _superSampling));
 }

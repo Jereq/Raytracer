@@ -429,6 +429,9 @@ cl::NDRange local2D(32, 1);
 cl::NDRange linearLocalSize(32);
 
 void useSettings(const TestSetting& setting);
+int superSampling = 1;
+bool sizeChanged = true;
+
 
 void keyCallback(GLFWwindow* _window, int _key, int _scanCode, int _action, int _mod)
 {
@@ -563,6 +566,25 @@ void keyCallback(GLFWwindow* _window, int _key, int _scanCode, int _action, int 
 		}
 		break;
 
+	case GLFW_KEY_I:
+		if (_action == GLFW_PRESS)
+		{
+			superSampling++;
+			sizeChanged = true;
+		}
+		break;
+
+	case GLFW_KEY_K:
+		if (_action == GLFW_PRESS)
+		{
+			if(superSampling > 1)
+			{
+				superSampling--;
+				sizeChanged = true;
+			}
+		}
+		break;
+
 	default:
 		if (_key >= GLFW_KEY_1 && _key < GLFW_KEY_1 + NUM_MODELS && _action == GLFW_PRESS)
 		{
@@ -598,7 +620,6 @@ void cursorPosCallback(GLFWwindow* _window, double _xPos, double _yPos)
 		rotation.y = -90.f;
 }
 
-bool sizeChanged = true;
 int windowWidth = 0;
 int windowHeight = 0;
 
@@ -1086,13 +1107,13 @@ int main(int argc, char** argv)
 				glObjects.clear();
 				glObjects.push_back(renderbuffer);
 		
-				numRays = windowWidth * windowHeight;
+				numRays = windowWidth * windowHeight * superSampling * superSampling;
 				primaryRaysBuffer = cl::Buffer(context, CL_MEM_READ_WRITE, numRays * sizeof(Ray));
 				accumulationBuffer = cl::Buffer(context, CL_MEM_READ_WRITE, numRays * sizeof(cl_float4));
 
 				primaryRaysKernel.setArg(0, primaryRaysBuffer);
-				primaryRaysKernel.setArg(3, windowWidth);
-				primaryRaysKernel.setArg(4, windowHeight);
+				primaryRaysKernel.setArg(3, windowWidth * superSampling);
+				primaryRaysKernel.setArg(4, windowHeight * superSampling);
 				primaryRaysKernel.setArg(5, accumulationBuffer);
 				
 				findClosestSpheresKernel.setArg(0, primaryRaysBuffer);
@@ -1173,7 +1194,8 @@ int main(int argc, char** argv)
 			std::vector<cl::Event> moveRaysEvents;
 			std::vector<cl::Event> transformModelEvents;
 
-			cl::Event primEvent = runKernel(queue, primaryRaysKernel, global2D, local2D, events);
+			cl::NDRange superSampledGlobal2D(global2D[0] * superSampling, global2D[1] * superSampling);
+			cl::Event primEvent = runKernel(queue, primaryRaysKernel, superSampledGlobal2D, local2D, events);
 
 			for (unsigned int k = 0; k < NUM_MODELS; k++)
 			{
@@ -1240,6 +1262,8 @@ int main(int argc, char** argv)
 			cl::Event aqEvent;
 			queue.enqueueAcquireGLObjects(&glObjects, &events, &aqEvent);
 			events.push_back(aqEvent);
+			
+			dumpImageKernel.setArg(3, superSampling);
 			cl::Event dumpEvent = runKernel(queue, dumpImageKernel, global2D, local2D, events);
 
 			cl::Event relEvent;
