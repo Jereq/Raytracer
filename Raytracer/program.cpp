@@ -10,8 +10,6 @@
 #include <glm/gtx/transform.hpp>
 #include <glm/gtc/random.hpp>
 
-#include <IL/il.h>
-
 #include <chrono>
 #include <fstream>
 #include <iomanip>
@@ -20,7 +18,9 @@
 #include <thread>
 #include <vector>
 
+#include "Model.h"
 #include "ObjModel.h"
+#include "TextureManager.h"
 
 std::string modelNames[] = {
 	"resources/cubeInv.obj",
@@ -33,6 +33,28 @@ std::string modelNames[] = {
 	"resources/bth.obj",
 };
 const int NUM_MODELS = sizeof(modelNames) / sizeof(std::string);
+
+std::string modelDiffuseTextures[NUM_MODELS] = {
+	"resources/bthcolor.dds",
+	"resources/CubeMap_COLOR.png",
+	"resources/bthcolor.dds",
+	"resources/bthcolor.dds",
+	"resources/bthcolor.dds",
+	"resources/bthcolor.dds",
+	"resources/bthcolor.dds",
+	"resources/bthcolor.dds",
+};
+
+std::string modelNormalTextures[NUM_MODELS] = {
+	"resources/CubeMap_NRM.jpg",
+	"resources/CubeMap_NRM.jpg",
+	"resources/CubeMap_NRM.jpg",
+	"resources/CubeMap_NRM.jpg",
+	"resources/CubeMap_NRM.jpg",
+	"resources/CubeMap_NRM.jpg",
+	"resources/CubeMap_NRM.jpg",
+	"resources/CubeMap_NRM.jpg",
+};
 
 struct TestSetting
 {
@@ -919,60 +941,7 @@ int main(int argc, char** argv)
 		initCL(context, devices, queue, false);
 
 		window.createFramebuffer(windowWidth, windowHeight);
-
-		ilInit();
-		ilEnable(IL_ORIGIN_SET);
-		ilOriginFunc(IL_ORIGIN_LOWER_LEFT);
-
-		ILuint image = ilGenImage();
-		ilBindImage(image);
-		ilLoadImage("resources/bthcolor.dds");
 		
-		static const std::pair<int, int> formatOrders[] =
-		{
-			std::make_pair(IL_RGBA, CL_RGBA),
-		};
-
-		static const std::pair<int, int> formatTypes[] =
-		{
-			std::make_pair(IL_FLOAT, CL_FLOAT),
-			std::make_pair(IL_UNSIGNED_BYTE, CL_UNORM_INT8),
-		};
-
-		cl::ImageFormat format(0, 0);
-		ILint imageFormat = ilGetInteger(IL_IMAGE_FORMAT);
-		ILint imageType = ilGetInteger(IL_IMAGE_TYPE);
-		for (auto& f : formatOrders)
-		{
-			if (f.first == imageFormat)
-			{
-				format.image_channel_order = f.second;
-				break;
-			}
-		}
-
-		for (auto& f : formatTypes)
-		{
-			if (f.first == imageType)
-			{
-				format.image_channel_data_type = f.second;
-				break;
-			}
-		}
-
-		if (format.image_channel_data_type == 0 || format.image_channel_order == 0)
-		{
-			throw std::exception("Invalid image format");
-		}
-
-		cl_int err = CL_SUCCESS;
-		cl::Image2D diffuseTexture(context, CL_MEM_COPY_HOST_PTR | CL_MEM_READ_ONLY, format, ilGetInteger(IL_IMAGE_WIDTH), ilGetInteger(IL_IMAGE_HEIGHT),
-			0, ilGetData(), &err);
-
-		ilDeleteImage(image);
-
-		ilShutDown();
-
 		cl::Program colorProgram = createProgramFromFile(context, devices, "writeImage.cl");
 		cl::Kernel accumulateColorKernel(colorProgram, "accumulateImage");
 		cl::Kernel dumpImageKernel(colorProgram, "dumpImage");
@@ -1040,22 +1009,28 @@ int main(int argc, char** argv)
 		auto prevPrint = currentTime;
 		initTimer();
 
-		ObjModel objModels[NUM_MODELS];
-		cl::Buffer objTransformedModels[NUM_MODELS];
-		glm::vec3 objRotations[NUM_MODELS];
+		TextureManager textureManager(context);
+
+		Model objModels[NUM_MODELS];
+		ModelInstance modelInstances[NUM_MODELS];
 		for (unsigned int i = 0; i < NUM_MODELS; i++)
 		{
-			objModels[i].Initialize(context, modelNames[i].c_str());
-			modelTriangleCount[i] = objModels[i].GetVertexCount() / 3;
-			objTransformedModels[i] = cl::Buffer(context, CL_MEM_READ_ONLY, objModels[i].GetVertexCount() * sizeof(ObjModel::VertexType));
+			objModels[i].model.Initialize(context, modelNames[i].c_str());
+			modelTriangleCount[i] = objModels[i].model.GetVertexCount() / 3;
+			objModels[i].transformedVertices = cl::Buffer(context, CL_MEM_READ_ONLY, objModels[i].model.GetVertexCount() * sizeof(ObjModel::VertexType));
+			objModels[i].diffuseMap = textureManager.loadTexture(modelDiffuseTextures[i]);
+			//objModels[i].normalMap = textureManager.loadTexture(modelNormalTextures[i]);
+
+
+			modelInstances[i].model = &objModels[i];
+			modelInstances[i].position = modelPositions[i];
+			modelInstances[i].scale = modelScales[i];
 		}
 		updateModelCount();
 
-		findClosestTrianglesKernel.setArg(5, diffuseTexture);
-		
 		cl::NDRange global2D;
 		cl::NDRange linearGlobalSize;
-
+		
 		updateSetting("Local2DSize", std::to_string(local2D[0]) + "x" + std::to_string(local2D[1]));
 		updateSetting("LocalLinearSize", std::to_string(linearLocalSize[0]));
 		
@@ -1144,7 +1119,7 @@ int main(int argc, char** argv)
 				
 				camera.setScreenRatio((float)windowWidth / (float)windowHeight);
 			}
-				
+			
 			global2D = cl::NDRange(leastMultiple(windowWidth, local2D[0]), leastMultiple(windowHeight, local2D[1]));
 			linearGlobalSize = cl::NDRange(leastMultiple(numRays, linearLocalSize[0]));
 
@@ -1199,26 +1174,29 @@ int main(int argc, char** argv)
 
 			for (unsigned int k = 0; k < NUM_MODELS; k++)
 			{
+				ModelInstance& model = modelInstances[k];
+
 				if (showModels[k])
 				{
-					objRotations[k] += modelRotationSpeeds[k] * (float)deltaTime;
+					model.rotation += modelRotationSpeeds[k] * (float)deltaTime;
 
-					glm::mat4 translation = glm::transpose(glm::translate(modelPositions[k]));
-					glm::mat4 rotationYaw = glm::transpose(glm::rotate(objRotations[k].x, glm::vec3(0.f, 1.f, 0.f)));
-					glm::mat4 rotationPitch = glm::transpose(glm::rotate(objRotations[k].y, glm::vec3(1.f, 0.f, 0.f)));
-					glm::mat4 rotationRoll = glm::transpose(glm::rotate(objRotations[k].z, glm::vec3(0.f, 0.f, 1.f)));
-					glm::mat4 scaling = glm::scale(glm::vec3(modelScales[k]));
+					glm::mat4 translation = glm::transpose(glm::translate(model.position));
+					glm::mat4 rotationYaw = glm::transpose(glm::rotate(model.rotation.x, glm::vec3(0.f, 1.f, 0.f)));
+					glm::mat4 rotationPitch = glm::transpose(glm::rotate(model.rotation.y, glm::vec3(1.f, 0.f, 0.f)));
+					glm::mat4 rotationRoll = glm::transpose(glm::rotate(model.rotation.z, glm::vec3(0.f, 0.f, 1.f)));
+					glm::mat4 scaling = glm::scale(glm::vec3(model.scale));
 
 					glm::mat4 world = scaling * rotationYaw * rotationPitch * rotationRoll * translation;
 
 					glm::mat4 invTranspose = glm::transpose(glm::inverse(scaling * rotationYaw * rotationPitch * rotationRoll));
 
-					transformVerticesKernel.setArg(0, objModels[k].getBuffer());
-					transformVerticesKernel.setArg(1, objTransformedModels[k]);
+					transformVerticesKernel.setArg(0, model.model->model.getBuffer());
+					transformVerticesKernel.setArg(1, model.model->transformedVertices);
 					transformVerticesKernel.setArg(2, world);
 					transformVerticesKernel.setArg(3, invTranspose);
-					transformVerticesKernel.setArg(4, objModels[k].GetVertexCount());
-					transformModelEvents.push_back(runKernel(queue, transformVerticesKernel, cl::NDRange(leastMultiple(objModels[k].GetVertexCount(), linearLocalSize[0])), linearLocalSize, events));
+					int vertexCount = model.model->model.GetVertexCount();
+					transformVerticesKernel.setArg(4, vertexCount);
+					transformModelEvents.push_back(runKernel(queue, transformVerticesKernel, cl::NDRange(leastMultiple(vertexCount, linearLocalSize[0])), linearLocalSize, events));
 				}
 			}
 
@@ -1228,10 +1206,13 @@ int main(int argc, char** argv)
 
 				for (unsigned int k = 0; k < NUM_MODELS; k++)
 				{
+					ModelInstance& model = modelInstances[k];
+
 					if (showModels[k])
 					{
-						findClosestTrianglesKernel.setArg(2, objTransformedModels[k]);
-						findClosestTrianglesKernel.setArg(3, objModels[k].GetVertexCount() / 3);
+						findClosestTrianglesKernel.setArg(2, model.model->transformedVertices);
+						findClosestTrianglesKernel.setArg(3, model.model->model.GetVertexCount() / 3);
+						findClosestTrianglesKernel.setArg(5, model.model->diffuseMap);
 						findClosestTrianglesKernel.setArg(6, k + 1);
 						triangleEvents.push_back(runKernel(queue, findClosestTrianglesKernel, linearGlobalSize, linearLocalSize, events));
 					}
@@ -1245,10 +1226,12 @@ int main(int argc, char** argv)
 					sphereShadowEvents.push_back(runKernel(queue, detectShadowWithSpheres, linearGlobalSize, linearLocalSize, events));
 					for (unsigned int k = 0; k < NUM_MODELS; k++)
 					{
+						ModelInstance& model = modelInstances[k];
+
 						if (showModels[k])
 						{
-							detectShadowWithTriangles.setArg(2, objTransformedModels[k]);
-							detectShadowWithTriangles.setArg(3, objModels[k].GetVertexCount() / 3);
+							detectShadowWithTriangles.setArg(2, model.model->transformedVertices);
+							detectShadowWithTriangles.setArg(3, model.model->model.GetVertexCount() / 3);
 							detectShadowWithTriangles.setArg(4, k + 1);
 							triangleShadowEvents.push_back(runKernel(queue, detectShadowWithTriangles, linearGlobalSize, linearLocalSize, events));
 						}

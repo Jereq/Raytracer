@@ -80,13 +80,16 @@
     <ClCompile Include="MovingLight.cpp" />
     <ClCompile Include="ObjModel.cpp" />
     <ClCompile Include="program.cpp" />
+    <ClCompile Include="TextureManager.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Camera.h" />
     <ClInclude Include="CL\cl.hpp" />
     <ClInclude Include="GLWindow.h" />
+    <ClInclude Include="Model.h" />
     <ClInclude Include="MovingLight.h" />
     <ClInclude Include="ObjModel.h" />
+    <ClInclude Include="TextureManager.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="rayTracing.cl" />
