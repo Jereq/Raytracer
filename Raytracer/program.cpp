@@ -46,7 +46,7 @@ std::string modelDiffuseTextures[NUM_MODELS] = {
 };
 
 std::string modelNormalTextures[NUM_MODELS] = {
-	"resources/Default_NRM.png",
+	"resources/Bump.png",
 	"resources/CubeMap_NRM.png",
 	"resources/Default_NRM.png",
 	"resources/Default_NRM.png",
