@@ -29,7 +29,10 @@ cl::Image2D TextureManager::loadTexture(const std::string& _filename)
 		if(texture.first == _filename)
 			return texture.second;
 	}
-	ilLoadImage(_filename.c_str());
+	if (!ilLoadImage(_filename.c_str()))
+	{
+		throw std::exception(("Failed to load file: " + _filename).c_str());
+	}
 
 	static const std::pair<int, int> formatOrders[] =
 	{

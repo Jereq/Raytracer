@@ -10,6 +10,8 @@ __kernel void transformVertices(__global Vertex* _vertIn, __global Vertex* _vert
 
 	v.position = matmul(&_transform, &v.position);
 	v.normal = matmul(&_invTransform, &v.normal);
+	v.tangent = matmul(&_transform, &v.tangent);
+	v.bitangent = matmul(&_transform, &v.bitangent);
 
 	_vertOut[id] = v;
 }

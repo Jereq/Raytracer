@@ -51,7 +51,7 @@ typedef struct Vertex
 	float4 textureCoord;
 	float4 normal;
 	float4 tangent;
-	float4 biTangent;
+	float4 bitangent;
 } Vertex;
 
 typedef struct Triangle

@@ -46,14 +46,14 @@ std::string modelDiffuseTextures[NUM_MODELS] = {
 };
 
 std::string modelNormalTextures[NUM_MODELS] = {
-	"resources/CubeMap_NRM.jpg",
-	"resources/CubeMap_NRM.jpg",
-	"resources/CubeMap_NRM.jpg",
-	"resources/CubeMap_NRM.jpg",
-	"resources/CubeMap_NRM.jpg",
-	"resources/CubeMap_NRM.jpg",
-	"resources/CubeMap_NRM.jpg",
-	"resources/CubeMap_NRM.jpg",
+	"resources/Default_NRM.png",
+	"resources/CubeMap_NRM.png",
+	"resources/Default_NRM.png",
+	"resources/Default_NRM.png",
+	"resources/Default_NRM.png",
+	"resources/Default_NRM.png",
+	"resources/Default_NRM.png",
+	"resources/Default_NRM.png",
 };
 
 struct TestSetting
@@ -1019,8 +1019,7 @@ int main(int argc, char** argv)
 			modelTriangleCount[i] = objModels[i].model.GetVertexCount() / 3;
 			objModels[i].transformedVertices = cl::Buffer(context, CL_MEM_READ_ONLY, objModels[i].model.GetVertexCount() * sizeof(ObjModel::VertexType));
 			objModels[i].diffuseMap = textureManager.loadTexture(modelDiffuseTextures[i]);
-			//objModels[i].normalMap = textureManager.loadTexture(modelNormalTextures[i]);
-
+			objModels[i].normalMap = textureManager.loadTexture(modelNormalTextures[i]);
 
 			modelInstances[i].model = &objModels[i];
 			modelInstances[i].position = modelPositions[i];
@@ -1213,7 +1212,8 @@ int main(int argc, char** argv)
 						findClosestTrianglesKernel.setArg(2, model.model->transformedVertices);
 						findClosestTrianglesKernel.setArg(3, model.model->model.GetVertexCount() / 3);
 						findClosestTrianglesKernel.setArg(5, model.model->diffuseMap);
-						findClosestTrianglesKernel.setArg(6, k + 1);
+						findClosestTrianglesKernel.setArg(6, model.model->normalMap);
+						findClosestTrianglesKernel.setArg(7, k + 1);
 						triangleEvents.push_back(runKernel(queue, findClosestTrianglesKernel, linearGlobalSize, linearLocalSize, events));
 					}
 				}

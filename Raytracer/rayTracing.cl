@@ -207,7 +207,7 @@ bool findTriangleIntersectDistance(float4 _position, float4 _direction, float _d
 	return true;
 }
 
-bool triangleIntersect(Ray* _ray, __global Triangle* _triangle, float _reflectFraction, image2d_t _diffuseTex)
+bool triangleIntersect(Ray* _ray, __global Triangle* _triangle, float _reflectFraction, image2d_t _diffuseTex, image2d_t _normalTex)
 {
 	float t = 0.f;
 	float u = 0.f;
@@ -218,6 +218,9 @@ bool triangleIntersect(Ray* _ray, __global Triangle* _triangle, float _reflectFr
 	}
 	
 	float2 texCoord = ((1.f - u - v) * _triangle->v[0].textureCoord.xy + u * _triangle->v[1].textureCoord.xy + v * _triangle->v[2].textureCoord.xy);
+	float4 normal = ((1.f - u - v) * _triangle->v[0].normal + u * _triangle->v[1].normal + v * _triangle->v[2].normal);
+	float4 tangent = ((1.f - u - v) * _triangle->v[0].tangent + u * _triangle->v[1].tangent + v * _triangle->v[2].tangent);
+	float4 bitangent = ((1.f - u - v) * _triangle->v[0].bitangent + u * _triangle->v[1].bitangent + v * _triangle->v[2].bitangent);
 
 	const sampler_t diffSampler = CLK_NORMALIZED_COORDS_TRUE | CLK_ADDRESS_CLAMP_TO_EDGE | CLK_FILTER_LINEAR;
 
@@ -227,12 +230,19 @@ bool triangleIntersect(Ray* _ray, __global Triangle* _triangle, float _reflectFr
 	_ray->strength = _reflectFraction;
 	_ray->shininess = _reflectFraction * 400.f;
 
-	_ray->surfaceNormal = normalize((1.f - u - v) * _triangle->v[0].normal + u * _triangle->v[1].normal + v * _triangle->v[2].normal);
+	float4 textureNormal = read_imagef(_normalTex, diffSampler, texCoord);
+	textureNormal -= 0.5f;
+	textureNormal *= 2.f;
+	textureNormal.w = 0.f;
+	_ray->surfaceNormal = normalize(
+		textureNormal.x * normalize(tangent)
+		+ textureNormal.y * normalize(bitangent)
+		+ textureNormal.z * normalize(normal));
 
 	return true;
 }
 
-__kernel void findClosestTriangles(__global Ray* _rays, int numRays, __global Triangle* _triangles, int _numTriangles, float _reflectFraction, image2d_t _diffuseTex, int _groupID)
+__kernel void findClosestTriangles(__global Ray* _rays, int numRays, __global Triangle* _triangles, int _numTriangles, float _reflectFraction, image2d_t _diffuseTex, image2d_t _normalTex, int _groupID)
 {
 	int id = get_global_id(0);
 	if (id >= numRays)
@@ -245,7 +255,7 @@ __kernel void findClosestTriangles(__global Ray* _rays, int numRays, __global Tr
 		if (r.collideGroup == _groupID && r.collideObject == i)
 			continue;
 
-		if(triangleIntersect(&r, &_triangles[i], _reflectFraction, _diffuseTex))
+		if(triangleIntersect(&r, &_triangles[i], _reflectFraction, _diffuseTex, _normalTex))
 		{
 			r.collideGroup = _groupID;
 			r.collideObject = i;
