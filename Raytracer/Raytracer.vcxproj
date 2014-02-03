@@ -40,11 +40,11 @@
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <IncludePath>$(AMDAPPSDKROOT)/include;C:\DevIL\include;$(CUDA_PATH)/include;C:\glew-1.10.0\include;$(ProgramFiles)\GLFW\include;C:\glm;$(IncludePath)</IncludePath>
-    <LibraryPath>C:/glew-1.10.0/lib/Release MX/$(Platform)/;C:\DevIL\lib;C:/glew-1.10.0/lib/Release/$(Platform)/;$(ProgramFiles)\GLFW/lib;$(AMDAPPSDKROOT)/lib/x86;$(CUDA_PATH)/lib/Win32;$(LibraryPath)</LibraryPath>
+    <LibraryPath>C:/DevIL/lib;C:/glew-1.10.0/lib/Release/$(Platform)/;$(ProgramFiles)\GLFW/lib;$(AMDAPPSDKROOT)lib/x86;$(CUDA_PATH)/lib/Win32;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <IncludePath>$(AMDAPPSDKROOT)/include;C:\DevIL\include;$(CUDA_PATH)/include;C:\glew-1.10.0\include;$(ProgramFiles)\GLFW\include;C:\glm;$(IncludePath)</IncludePath>
-    <LibraryPath>C:/glew-1.10.0/lib/Release MX/$(Platform)/;C:\DevIL\lib;C:/glew-1.10.0/lib/Release/$(Platform)/;$(ProgramFiles)\GLFW/lib;$(AMDAPPSDKROOT)/lib/x86;$(CUDA_PATH)/lib/Win32;$(LibraryPath)</LibraryPath>
+    <LibraryPath>C:/DevIL/lib;C:/glew-1.10.0/lib/Release/$(Platform)/;$(ProgramFiles)\GLFW/lib;$(AMDAPPSDKROOT)lib/x86;$(CUDA_PATH)/lib/Win32;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
@@ -81,6 +81,7 @@
     <ClCompile Include="ObjModel.cpp" />
     <ClCompile Include="program.cpp" />
     <ClCompile Include="TextureManager.cpp" />
+    <ClCompile Include="TubeGenerator.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Camera.h" />
@@ -90,6 +91,7 @@
     <ClInclude Include="MovingLight.h" />
     <ClInclude Include="ObjModel.h" />
     <ClInclude Include="TextureManager.h" />
+    <ClInclude Include="TubeGenerator.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="rayTracing.cl" />

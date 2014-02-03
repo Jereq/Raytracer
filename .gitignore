@@ -45,3 +45,4 @@ ipch/
 
 testCaseCollection.xml
 *.csv
+!Raytracer/resources/*

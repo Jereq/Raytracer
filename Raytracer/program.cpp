@@ -21,6 +21,9 @@
 #include "Model.h"
 #include "ObjModel.h"
 #include "TextureManager.h"
+#include "TubeGenerator.h"
+
+static const std::string fallbackModelPath = "resources/cube.obj";
 
 std::string modelNames[] = {
 	"resources/cubeInv.obj",
@@ -31,6 +34,7 @@ std::string modelNames[] = {
 	"resources/768 tri.obj",
 	"resources/3072 tri.obj",
 	"resources/bth.obj",
+	"resources/tube.obj",
 };
 const int NUM_MODELS = sizeof(modelNames) / sizeof(std::string);
 
@@ -43,6 +47,7 @@ std::string modelDiffuseTextures[NUM_MODELS] = {
 	"resources/bthcolor.dds",
 	"resources/bthcolor.dds",
 	"resources/bthcolor.dds",
+	"resources/CubeMap_COLOR.png",
 };
 
 std::string modelNormalTextures[NUM_MODELS] = {
@@ -54,6 +59,7 @@ std::string modelNormalTextures[NUM_MODELS] = {
 	"resources/Default_NRM.png",
 	"resources/Default_NRM.png",
 	"resources/Default_NRM.png",
+	"resources/CubeMap_NRM.png",
 };
 
 struct TestSetting
@@ -332,7 +338,7 @@ cl::Program createProgramFromFile(cl::Context& _context, std::vector<cl::Device>
 
 	try
 	{
-		program.build(_devices, "-Werror -cl-fast-relaxed-math -cl-denorms-are-zero");
+		program.build(_devices, "-Werror -cl-fast-relaxed-math -cl-denorms-are-zero -I ./");
 	}
 	catch (const cl::Error&)
 	{
@@ -399,6 +405,7 @@ const glm::vec3 modelPositions[NUM_MODELS] = {
 	glm::vec3(-3.f, -0.5f, -2.f),
 	glm::vec3(-3.f, -0.5f, -4.f),
 	glm::vec3(0.f, 0.f, 0.f),
+	glm::vec3(0.f, -0.1f, 0.f),
 };
 
 const float modelScales[NUM_MODELS] = {
@@ -410,6 +417,7 @@ const float modelScales[NUM_MODELS] = {
 	0.005f,
 	0.005f,
 	0.04f,
+	0.1f,
 };
 
 const glm::vec3 modelRotationSpeeds[NUM_MODELS] = {
@@ -421,6 +429,7 @@ const glm::vec3 modelRotationSpeeds[NUM_MODELS] = {
 	glm::vec3(30.f, 1.f, 1.f),
 	glm::vec3(90.f, 1.f, 1.f),
 	glm::vec3(12.f, 6.7f, 42.f),
+	glm::vec3(0.f, 0.f, 0.f),
 };
 
 bool showModels[NUM_MODELS] = {true};
@@ -1015,7 +1024,17 @@ int main(int argc, char** argv)
 		ModelInstance modelInstances[NUM_MODELS];
 		for (unsigned int i = 0; i < NUM_MODELS; i++)
 		{
-			objModels[i].model.Initialize(context, modelNames[i].c_str());
+			if (!objModels[i].model.Initialize(context, modelNames[i].c_str()))
+			{
+				if (!objModels[i].model.Initialize(context, fallbackModelPath.c_str()))
+				{
+					throw std::exception(("Failed to load model: " + modelNames[i]).c_str());
+				}
+				else
+				{
+					std::cout << "Warning: Failed to load model: " << modelNames[i] << ", using fallback model." << std::endl;
+				}
+			}
 			modelTriangleCount[i] = objModels[i].model.GetVertexCount() / 3;
 			objModels[i].transformedVertices = cl::Buffer(context, CL_MEM_READ_ONLY, objModels[i].model.GetVertexCount() * sizeof(ObjModel::VertexType));
 			objModels[i].diffuseMap = textureManager.loadTexture(modelDiffuseTextures[i]);
@@ -1282,14 +1301,22 @@ int main(int argc, char** argv)
 	catch (const cl::Error& err)
 	{
 		std::cerr << "Error: (" << err.err() << ") " << err.what() << std::endl;
+#ifdef _DEBUG
+		throw;
+#else
 		system("pause");
 		return EXIT_FAILURE;
+#endif
 	}
 	catch (const std::exception& ex)
 	{
 		std::cerr << "Error: " << ex.what() << std::endl;
+#ifdef _DEBUG
+		throw;
+#else
 		system("pause");
 		return EXIT_FAILURE;
+#endif
 	}
 
 	return EXIT_SUCCESS;
