@@ -25,9 +25,13 @@ private:
 	std::vector<glm::vec3> normals;
 	std::vector<Triangle> faces;
 
+
+
 public:
 	void generate();
 	void outputMesh(std::ostream& _stream);
+	void outputSkeleton(std::ostream& _stream);
+	void outputBendAnimation(std::ostream& _stream);
 
 private:
 	void createQuad(glm::vec3 _pos, glm::vec3 _right, glm::vec3 _up,

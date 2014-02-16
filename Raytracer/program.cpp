@@ -1,3 +1,4 @@
+#include "Bone.h"
 #include "Camera.h"
 #include "GLWindow.h"
 #include "MovingLight.h"

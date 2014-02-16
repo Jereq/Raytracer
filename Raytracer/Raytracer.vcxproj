@@ -75,6 +75,8 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="Bone.cpp" />
+    <ClCompile Include="CachedTransform.cpp" />
     <ClCompile Include="Camera.cpp" />
     <ClCompile Include="GLWindow.cpp" />
     <ClCompile Include="MovingLight.cpp" />
@@ -84,6 +86,8 @@
     <ClCompile Include="TubeGenerator.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="Bone.h" />
+    <ClInclude Include="CachedTransform.h" />
     <ClInclude Include="Camera.h" />
     <ClInclude Include="CL\cl.hpp" />
     <ClInclude Include="GLWindow.h" />
