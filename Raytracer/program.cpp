@@ -19,6 +19,7 @@
 #include <thread>
 #include <vector>
 
+#include "AnimatedObjModel.h"
 #include "Model.h"
 #include "ObjModel.h"
 #include "TextureManager.h"
@@ -421,16 +422,16 @@ const float modelScales[NUM_MODELS] = {
 	0.1f,
 };
 
-const glm::vec3 modelRotationSpeeds[NUM_MODELS] = {
-	glm::vec3(0.f, 0.f, 0.f),
-	glm::vec3(5.f, 10.f, 13.f),
-	glm::vec3(10.f, 1.f, 1.f),
-	glm::vec3(15.f, 1.f, 1.f),
-	glm::vec3(20.f, 1.f, 1.f),
-	glm::vec3(30.f, 1.f, 1.f),
-	glm::vec3(90.f, 1.f, 1.f),
-	glm::vec3(12.f, 6.7f, 42.f),
-	glm::vec3(0.f, 0.f, 0.f),
+const std::pair<glm::vec3, float> modelRotations[NUM_MODELS] = {
+	std::make_pair(glm::normalize(glm::vec3(1.f, 0.f, 0.f)), 0.f),
+	std::make_pair(glm::normalize(glm::vec3(1.f, 1.f, 0.f)), 10.f),
+	std::make_pair(glm::normalize(glm::vec3(0.f, 1.f, 0.f)), 20.f),
+	std::make_pair(glm::normalize(glm::vec3(1.f, 0.f, 1.f)), 30.f),
+	std::make_pair(glm::normalize(glm::vec3(0.f, 1.f, 0.f)), 40.f),
+	std::make_pair(glm::normalize(glm::vec3(1.f, 0.f, 0.f)), 50.f),
+	std::make_pair(glm::normalize(glm::vec3(1.f, 0.f, 0.f)), 60.f),
+	std::make_pair(glm::normalize(glm::vec3(1.f, 0.f, 0.f)), 70.f),
+	std::make_pair(glm::normalize(glm::vec3(0.f, 1.f, 0.f)), 80.f),
 };
 
 bool showModels[NUM_MODELS] = {true};
@@ -1000,7 +1001,7 @@ int main(int argc, char** argv)
 		for (unsigned int i = 0; i < MAX_LIGHTS; i++)
 		{
 			movLights.push_back(MovingLight(glm::vec4(50.f, 50.f, 50.f, 0.f),
-				glm::vec4(i, 0.f, 10.f, 1.f), glm::vec4(i, 0.f, -10.f, 1.f), 1.f / (i + 1)));
+				glm::vec4(i, 0.f, 9.f, 1.f), glm::vec4(i, 0.f, -9.f, 1.f), 1.f / (i + 1)));
 		}
 
 		cl::Buffer lightBuffer(context, CL_MEM_READ_ONLY, sizeof(Light) * movLights.size());
@@ -1022,6 +1023,10 @@ int main(int argc, char** argv)
 		TextureManager textureManager(context);
 
 		Model objModels[NUM_MODELS];
+
+		AnimatedObjModel aniModelLoader(context);
+		ModelData::ptr modelData = aniModelLoader.loadFromFile("resources/tube.aobj");
+
 		ModelInstance modelInstances[NUM_MODELS];
 		for (unsigned int i = 0; i < NUM_MODELS; i++)
 		{
@@ -1042,8 +1047,8 @@ int main(int argc, char** argv)
 			objModels[i].normalMap = textureManager.loadTexture(modelNormalTextures[i]);
 
 			modelInstances[i].model = &objModels[i];
-			modelInstances[i].position = modelPositions[i];
-			modelInstances[i].scale = modelScales[i];
+			modelInstances[i].world.setTranslation(modelPositions[i]);
+			modelInstances[i].world.setScale(glm::vec3(modelScales[i]));
 		}
 		updateModelCount();
 
@@ -1197,21 +1202,16 @@ int main(int argc, char** argv)
 
 				if (showModels[k])
 				{
-					model.rotation += modelRotationSpeeds[k] * (float)deltaTime;
+					model.world.setOrientation(
+						glm::quat(glm::rotate(modelRotations[k].second * (float)deltaTime, modelRotations[k].first)) *
+						model.world.getOrientation());
 
-					glm::mat4 translation = glm::transpose(glm::translate(model.position));
-					glm::mat4 rotationYaw = glm::transpose(glm::rotate(model.rotation.x, glm::vec3(0.f, 1.f, 0.f)));
-					glm::mat4 rotationPitch = glm::transpose(glm::rotate(model.rotation.y, glm::vec3(1.f, 0.f, 0.f)));
-					glm::mat4 rotationRoll = glm::transpose(glm::rotate(model.rotation.z, glm::vec3(0.f, 0.f, 1.f)));
-					glm::mat4 scaling = glm::scale(glm::vec3(model.scale));
-
-					glm::mat4 world = scaling * rotationYaw * rotationPitch * rotationRoll * translation;
-
-					glm::mat4 invTranspose = glm::transpose(glm::inverse(scaling * rotationYaw * rotationPitch * rotationRoll));
+					const glm::mat4& world = model.world.getTransform();
+					glm::mat4 invTranspose = glm::inverse(world);
 
 					transformVerticesKernel.setArg(0, model.model->model.getBuffer());
 					transformVerticesKernel.setArg(1, model.model->transformedVertices);
-					transformVerticesKernel.setArg(2, world);
+					transformVerticesKernel.setArg(2, glm::transpose(world));
 					transformVerticesKernel.setArg(3, invTranspose);
 					int vertexCount = model.model->model.GetVertexCount();
 					transformVerticesKernel.setArg(4, vertexCount);

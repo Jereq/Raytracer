@@ -1,6 +1,8 @@
 #pragma once
 
+#include "CachedTransform.h"
 #include "ObjModel.h"
+#include "Skeleton.h"
 
 class Model
 {
@@ -15,7 +17,6 @@ class ModelInstance
 {
 public:
 	Model* model;
-	glm::vec3 position;
-	glm::vec3 rotation;
-	float scale;
+	CachedTransform world;
+	Skeleton skeleton;
 };

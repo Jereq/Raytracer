@@ -75,25 +75,33 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="AnimatedObjModel.cpp" />
     <ClCompile Include="Bone.cpp" />
     <ClCompile Include="CachedTransform.cpp" />
     <ClCompile Include="Camera.cpp" />
     <ClCompile Include="GLWindow.cpp" />
+    <ClCompile Include="ModelData.cpp" />
     <ClCompile Include="MovingLight.cpp" />
     <ClCompile Include="ObjModel.cpp" />
+    <ClCompile Include="Pose.cpp" />
     <ClCompile Include="program.cpp" />
+    <ClCompile Include="Skeleton.cpp" />
     <ClCompile Include="TextureManager.cpp" />
     <ClCompile Include="TubeGenerator.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="AnimatedObjModel.h" />
     <ClInclude Include="Bone.h" />
     <ClInclude Include="CachedTransform.h" />
     <ClInclude Include="Camera.h" />
     <ClInclude Include="CL\cl.hpp" />
     <ClInclude Include="GLWindow.h" />
+    <ClInclude Include="ModelData.h" />
     <ClInclude Include="Model.h" />
     <ClInclude Include="MovingLight.h" />
     <ClInclude Include="ObjModel.h" />
+    <ClInclude Include="Pose.h" />
+    <ClInclude Include="Skeleton.h" />
     <ClInclude Include="TextureManager.h" />
     <ClInclude Include="TubeGenerator.h" />
   </ItemGroup>
