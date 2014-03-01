@@ -1022,17 +1022,16 @@ int main(int argc, char** argv)
 
 		TextureManager textureManager(context);
 
-		Model objModels[NUM_MODELS];
-
-		AnimatedObjModel aniModelLoader(context);
-		ModelData::ptr modelData = aniModelLoader.loadFromFile("resources/tube.aobj");
+		Model models[NUM_MODELS];
 
 		ModelInstance modelInstances[NUM_MODELS];
 		for (unsigned int i = 0; i < NUM_MODELS; i++)
 		{
-			if (!objModels[i].model.Initialize(context, modelNames[i].c_str()))
+			ObjModel obj;
+
+			if (!obj.Initialize(context, modelNames[i].c_str()))
 			{
-				if (!objModels[i].model.Initialize(context, fallbackModelPath.c_str()))
+				if (!obj.Initialize(context, fallbackModelPath.c_str()))
 				{
 					throw std::exception(("Failed to load model: " + modelNames[i]).c_str());
 				}
@@ -1041,15 +1040,20 @@ int main(int argc, char** argv)
 					std::cout << "Warning: Failed to load model: " << modelNames[i] << ", using fallback model." << std::endl;
 				}
 			}
-			modelTriangleCount[i] = objModels[i].model.GetVertexCount() / 3;
-			objModels[i].transformedVertices = cl::Buffer(context, CL_MEM_READ_ONLY, objModels[i].model.GetVertexCount() * sizeof(ObjModel::VertexType));
-			objModels[i].diffuseMap = textureManager.loadTexture(modelDiffuseTextures[i]);
-			objModels[i].normalMap = textureManager.loadTexture(modelNormalTextures[i]);
+			modelTriangleCount[i] = obj.GetVertexCount() / 3;
+			models[i].data.reset(new ModelData(obj.getBuffer(), obj.GetVertexCount()));
+			models[i].transformedVertices = cl::Buffer(context, CL_MEM_READ_ONLY, obj.GetVertexCount() * sizeof(ObjModel::VertexType));
+			models[i].diffuseMap = textureManager.loadTexture(modelDiffuseTextures[i]);
+			models[i].normalMap = textureManager.loadTexture(modelNormalTextures[i]);
 
-			modelInstances[i].model = &objModels[i];
+			modelInstances[i].model = &models[i];
 			modelInstances[i].world.setTranslation(modelPositions[i]);
 			modelInstances[i].world.setScale(glm::vec3(modelScales[i]));
 		}
+
+		AnimatedObjModel aniModelLoader(context);
+		ModelData::ptr modelData = aniModelLoader.loadFromFile("resources/tube.aobj");
+
 		updateModelCount();
 
 		cl::NDRange global2D;
@@ -1209,11 +1213,11 @@ int main(int argc, char** argv)
 					const glm::mat4& world = model.world.getTransform();
 					glm::mat4 invTranspose = glm::inverse(world);
 
-					transformVerticesKernel.setArg(0, model.model->model.getBuffer());
+					transformVerticesKernel.setArg(0, model.model->data->getVertexBuffer());
 					transformVerticesKernel.setArg(1, model.model->transformedVertices);
 					transformVerticesKernel.setArg(2, glm::transpose(world));
 					transformVerticesKernel.setArg(3, invTranspose);
-					int vertexCount = model.model->model.GetVertexCount();
+					int vertexCount = model.model->data->getVertexCount();
 					transformVerticesKernel.setArg(4, vertexCount);
 					transformModelEvents.push_back(runKernel(queue, transformVerticesKernel, cl::NDRange(leastMultiple(vertexCount, linearLocalSize[0])), linearLocalSize, events));
 				}
@@ -1230,7 +1234,7 @@ int main(int argc, char** argv)
 					if (showModels[k])
 					{
 						findClosestTrianglesKernel.setArg(2, model.model->transformedVertices);
-						findClosestTrianglesKernel.setArg(3, model.model->model.GetVertexCount() / 3);
+						findClosestTrianglesKernel.setArg(3, model.model->data->getVertexCount() / 3);
 						findClosestTrianglesKernel.setArg(5, model.model->diffuseMap);
 						findClosestTrianglesKernel.setArg(6, model.model->normalMap);
 						findClosestTrianglesKernel.setArg(7, k + 1);
@@ -1251,7 +1255,7 @@ int main(int argc, char** argv)
 						if (showModels[k])
 						{
 							detectShadowWithTriangles.setArg(2, model.model->transformedVertices);
-							detectShadowWithTriangles.setArg(3, model.model->model.GetVertexCount() / 3);
+							detectShadowWithTriangles.setArg(3, model.model->data->getVertexCount() / 3);
 							detectShadowWithTriangles.setArg(4, k + 1);
 							triangleShadowEvents.push_back(runKernel(queue, detectShadowWithTriangles, linearGlobalSize, linearLocalSize, events));
 						}

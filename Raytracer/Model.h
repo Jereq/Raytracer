@@ -1,13 +1,13 @@
 #pragma once
 
 #include "CachedTransform.h"
-#include "ObjModel.h"
+#include "ModelData.h"
 #include "Skeleton.h"
 
 class Model
 {
 public:
-	ObjModel model;
+	ModelData::ptr data;
 	cl::Buffer transformedVertices;
 	cl::Image2D diffuseMap;
 	cl::Image2D normalMap;

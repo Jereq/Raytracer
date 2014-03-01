@@ -3,6 +3,8 @@
 #include "Bone.h"
 #include "Pose.h"
 
+#include <CL/cl.hpp>
+
 class Skeleton
 {
 private:
@@ -10,7 +12,9 @@ private:
 	const Pose::ptr currentPose;
 	std::vector<glm::mat4> bindToCurrentTransforms;
 
+	cl::Buffer transformBuffer;
+
 public:
 	Skeleton();
-	Skeleton(const Pose::ptr _bindPose);
+	Skeleton(cl::Context _context, const Pose::ptr _bindPose);
 };
