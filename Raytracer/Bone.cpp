@@ -35,6 +35,11 @@ const std::string& Bone::getName() const
 	return name;
 }
 
+CachedTransform& Bone::getLocalTransform()
+{
+	return transform;
+}
+
 const CachedTransform& Bone::getLocalTransform() const
 {
 	return transform;

@@ -54,6 +54,17 @@ typedef struct Vertex
 	float4 bitangent;
 } Vertex;
 
+typedef struct SkeletalVertex
+{
+	float4 position;
+	float4 textureCoord;
+	float4 normal;
+	float4 tangent;
+	float4 bitangent;
+	int bone;
+	int padding[3];
+} SkeletalVertex;
+
 typedef struct Triangle
 {
 	Vertex v[3];

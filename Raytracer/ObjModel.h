@@ -1,5 +1,7 @@
 #pragma once
-//#include "TextureArray.h"
+
+#include "Vertex.h"
+
 #include <glm/glm.hpp>
 #include "CL/cl.hpp"
 #include <vector>
@@ -7,16 +9,6 @@ using std::vector;
 
 class ObjModel
 {
-public:
-	//this typedef must match the layout in the Shader Class
-	struct VertexType
-	{
-		glm::vec4 position;
-		glm::vec4 texture;
-		glm::vec4 normal;
-		glm::vec4 tangent;
-		glm::vec4 binormal;
-	};
 private:
 	struct FaceType
 	{

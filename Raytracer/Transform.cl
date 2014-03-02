@@ -15,3 +15,23 @@ __kernel void transformVertices(__global Vertex* _vertIn, __global Vertex* _vert
 
 	_vertOut[id] = v;
 }
+
+__kernel void transformSkeletalVertices(__global SkeletalVertex* _vertIn, __global Vertex* _vertOut, __global mat4* _transforms, int _numVert)
+{
+	int id = get_global_id(0);
+	if (id >= _numVert)
+		return;
+
+	SkeletalVertex sv = _vertIn[id];
+
+	mat4 transform = _transforms[sv.bone];
+
+	Vertex v;
+	v.position = matmul(&transform, &sv.position);
+	v.textureCoord = sv.textureCoord;
+	v.normal = matmul(&transform, &sv.normal);
+	v.tangent = matmul(&transform, &sv.tangent);
+	v.bitangent = matmul(&transform, &sv.bitangent);
+
+	_vertOut[id] = v;
+}

@@ -15,7 +15,10 @@ private:
 
 public:
 	explicit Pose(const std::vector<Bone>& _bones);
-	explicit Pose(const ptr _pose);
+	explicit Pose(const c_ptr _pose);
 
 	int getNumberOfBones() const;
+	std::vector<Bone>& getBones();
+
+	void calculateOffsetTo(Pose::c_ptr _other, std::vector<glm::mat4>& _out) const;
 };

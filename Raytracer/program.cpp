@@ -431,7 +431,7 @@ const std::pair<glm::vec3, float> modelRotations[NUM_MODELS] = {
 	std::make_pair(glm::normalize(glm::vec3(1.f, 0.f, 0.f)), 50.f),
 	std::make_pair(glm::normalize(glm::vec3(1.f, 0.f, 0.f)), 60.f),
 	std::make_pair(glm::normalize(glm::vec3(1.f, 0.f, 0.f)), 70.f),
-	std::make_pair(glm::normalize(glm::vec3(0.f, 1.f, 0.f)), 80.f),
+	std::make_pair(glm::normalize(glm::vec3(0.f, 1.f, 0.f)), 0.f),
 };
 
 bool showModels[NUM_MODELS] = {true};
@@ -936,6 +936,8 @@ int main(int argc, char** argv)
 	const static std::chrono::system_clock::duration MEASURE_TIME(std::chrono::seconds(5));
 	const static double MEASURE_TIME_D = std::chrono::duration_cast<std::chrono::duration<double>>(MEASURE_TIME).count();
 
+	float animationTime = 0.f;
+
 	updateSetting("NumBounces", (float)numBounces);
 	updateSetting("NumLights", (float)numLights);
 	
@@ -968,6 +970,7 @@ int main(int argc, char** argv)
 
 		cl::Program transformProgram = createProgramFromFile(context, devices, "Transform.cl");
 		cl::Kernel transformVerticesKernel(transformProgram, "transformVertices");
+		cl::Kernel transformSkeletalVerticesKernel(transformProgram, "transformSkeletalVertices");
 
 		int numRays;
 		cl::Buffer primaryRaysBuffer;
@@ -1025,7 +1028,7 @@ int main(int argc, char** argv)
 		Model models[NUM_MODELS];
 
 		ModelInstance modelInstances[NUM_MODELS];
-		for (unsigned int i = 0; i < NUM_MODELS; i++)
+		for (unsigned int i = 0; i < NUM_MODELS - 1; i++)
 		{
 			ObjModel obj;
 
@@ -1042,7 +1045,7 @@ int main(int argc, char** argv)
 			}
 			modelTriangleCount[i] = obj.GetVertexCount() / 3;
 			models[i].data.reset(new ModelData(obj.getBuffer(), obj.GetVertexCount()));
-			models[i].transformedVertices = cl::Buffer(context, CL_MEM_READ_ONLY, obj.GetVertexCount() * sizeof(ObjModel::VertexType));
+			models[i].transformedVertices = cl::Buffer(context, CL_MEM_READ_ONLY, obj.GetVertexCount() * sizeof(Vertex));
 			models[i].diffuseMap = textureManager.loadTexture(modelDiffuseTextures[i]);
 			models[i].normalMap = textureManager.loadTexture(modelNormalTextures[i]);
 
@@ -1053,6 +1056,16 @@ int main(int argc, char** argv)
 
 		AnimatedObjModel aniModelLoader(context);
 		ModelData::ptr modelData = aniModelLoader.loadFromFile("resources/tube.aobj");
+
+		models[NUM_MODELS - 1].data = modelData;
+		models[NUM_MODELS - 1].transformedVertices = cl::Buffer(context, CL_MEM_READ_ONLY, modelData->getVertexCount() * sizeof(Vertex));
+		models[NUM_MODELS - 1].diffuseMap = textureManager.loadTexture(modelDiffuseTextures[NUM_MODELS - 1]);
+		models[NUM_MODELS - 1].normalMap = textureManager.loadTexture(modelNormalTextures[NUM_MODELS - 1]);
+
+		modelInstances[NUM_MODELS - 1].model = models + NUM_MODELS - 1;
+		modelInstances[NUM_MODELS - 1].world.setTranslation(modelPositions[NUM_MODELS - 1]);
+		modelInstances[NUM_MODELS - 1].world.setScale(glm::vec3(modelScales[NUM_MODELS - 1]));
+		modelInstances[NUM_MODELS - 1].skeleton = Skeleton(context, modelData->getBindPose());
 
 		updateModelCount();
 
@@ -1158,6 +1171,13 @@ int main(int argc, char** argv)
 				camera.setPosition(camera.getPosition() + glm::vec3(rotY * glm::vec4(velocity.x, 0.f, velocity.y, 0.f)));
 			}
 			camera.setRotation(glm::vec3(rotation.y, -rotation.x, 0.f));
+
+			animationTime += (float)deltaTime;
+			std::vector<Bone>& aniBones = modelInstances[NUM_MODELS - 1].skeleton.getCurrentPose()->getBones();
+			for (auto& bone : aniBones)
+			{
+				bone.getLocalTransform().setOrientation(glm::quat(glm::rotate(sinf(animationTime) * 360.f / (aniBones.size() - 1), glm::vec3(0.f, 0.f, 1.f))));
+			}
 			
 			findClosestTrianglesKernel.setArg(4, cubeReflect);
 
@@ -1211,15 +1231,30 @@ int main(int argc, char** argv)
 						model.world.getOrientation());
 
 					const glm::mat4& world = model.world.getTransform();
-					glm::mat4 invTranspose = glm::inverse(world);
 
-					transformVerticesKernel.setArg(0, model.model->data->getVertexBuffer());
-					transformVerticesKernel.setArg(1, model.model->transformedVertices);
-					transformVerticesKernel.setArg(2, glm::transpose(world));
-					transformVerticesKernel.setArg(3, invTranspose);
-					int vertexCount = model.model->data->getVertexCount();
-					transformVerticesKernel.setArg(4, vertexCount);
-					transformModelEvents.push_back(runKernel(queue, transformVerticesKernel, cl::NDRange(leastMultiple(vertexCount, linearLocalSize[0])), linearLocalSize, events));
+					if (model.model->data->isAnimated())
+					{
+						model.skeleton.setWorld(world);
+
+						transformSkeletalVerticesKernel.setArg(0, model.model->data->getVertexBuffer());
+						transformSkeletalVerticesKernel.setArg(1, model.model->transformedVertices);
+						transformSkeletalVerticesKernel.setArg(2, model.skeleton.getTransformBuffer(queue));
+						int vertexCount = model.model->data->getVertexCount();
+						transformSkeletalVerticesKernel.setArg(3, vertexCount);
+						transformModelEvents.push_back(runKernel(queue, transformSkeletalVerticesKernel, cl::NDRange(leastMultiple(vertexCount, linearLocalSize[0])), linearLocalSize, events));
+					}
+					else
+					{
+						glm::mat4 invTranspose = glm::inverse(world);
+
+						transformVerticesKernel.setArg(0, model.model->data->getVertexBuffer());
+						transformVerticesKernel.setArg(1, model.model->transformedVertices);
+						transformVerticesKernel.setArg(2, glm::transpose(world));
+						transformVerticesKernel.setArg(3, invTranspose);
+						int vertexCount = model.model->data->getVertexCount();
+						transformVerticesKernel.setArg(4, vertexCount);
+						transformModelEvents.push_back(runKernel(queue, transformVerticesKernel, cl::NDRange(leastMultiple(vertexCount, linearLocalSize[0])), linearLocalSize, events));
+					}
 				}
 			}
 

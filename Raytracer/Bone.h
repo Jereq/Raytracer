@@ -34,6 +34,7 @@ public:
 		int _parentIndex = -1);
 
 	const std::string& getName() const;
+	CachedTransform& getLocalTransform();
 	const CachedTransform& getLocalTransform() const;
 	glm::mat4x4 getObjectTransform() const;
 

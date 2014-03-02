@@ -87,7 +87,7 @@ cl::Buffer ObjModel::getBuffer()
 
 bool ObjModel::InitializeBuffers(cl::Context &context)
 {
-	vector<VertexType>	tVertices;
+	vector<Vertex>	tVertices;
 	tVertices.resize(mVertexCount);
 
 	//Load the vertex array and index array with data.
@@ -100,7 +100,7 @@ bool ObjModel::InitializeBuffers(cl::Context &context)
 		tVertices[i].binormal = glm::vec4(mModel[i].bx, mModel[i].by, mModel[i].bz, 0.f);
 	}
 
-	mVertexBuffer = cl::Buffer(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, sizeof(VertexType) * mVertexCount, tVertices.data());
+	mVertexBuffer = cl::Buffer(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, sizeof(Vertex) * mVertexCount, tVertices.data());
 	
 	return true;
 }
