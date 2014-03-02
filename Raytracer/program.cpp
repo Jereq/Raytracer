@@ -407,7 +407,7 @@ const glm::vec3 modelPositions[NUM_MODELS] = {
 	glm::vec3(-3.f, -0.5f, -2.f),
 	glm::vec3(-3.f, -0.5f, -4.f),
 	glm::vec3(0.f, 0.f, 0.f),
-	glm::vec3(0.f, -0.1f, 0.f),
+	glm::vec3(-0.2f, -0.4f, 0.f),
 };
 
 const float modelScales[NUM_MODELS] = {
@@ -419,7 +419,7 @@ const float modelScales[NUM_MODELS] = {
 	0.005f,
 	0.005f,
 	0.04f,
-	0.1f,
+	0.4f,
 };
 
 const std::pair<glm::vec3, float> modelRotations[NUM_MODELS] = {
@@ -431,7 +431,7 @@ const std::pair<glm::vec3, float> modelRotations[NUM_MODELS] = {
 	std::make_pair(glm::normalize(glm::vec3(1.f, 0.f, 0.f)), 50.f),
 	std::make_pair(glm::normalize(glm::vec3(1.f, 0.f, 0.f)), 60.f),
 	std::make_pair(glm::normalize(glm::vec3(1.f, 0.f, 0.f)), 70.f),
-	std::make_pair(glm::normalize(glm::vec3(0.f, 1.f, 0.f)), 0.f),
+	std::make_pair(glm::normalize(glm::vec3(0.f, 1.f, 0.f)), 15.f),
 };
 
 bool showModels[NUM_MODELS] = {true};
@@ -1174,9 +1174,11 @@ int main(int argc, char** argv)
 
 			animationTime += (float)deltaTime;
 			std::vector<Bone>& aniBones = modelInstances[NUM_MODELS - 1].skeleton.getCurrentPose()->getBones();
-			for (auto& bone : aniBones)
+			aniBones[0].getLocalTransform().setScale(glm::vec3(1.f, 1.f + sinf(animationTime * 3.1f) * 0.2f, 1.f));
+			for (size_t i = 1; i < aniBones.size(); ++i)
 			{
-				bone.getLocalTransform().setOrientation(glm::quat(glm::rotate(sinf(animationTime) * 360.f / (aniBones.size() - 1), glm::vec3(0.f, 0.f, 1.f))));
+				auto& bone = aniBones[i];
+				bone.getLocalTransform().setOrientation(glm::quat(glm::rotate((sinf(animationTime) + 1.f) * 180.f / (aniBones.size() - 1), glm::vec3(0.f, 0.f, 1.f))));
 			}
 			
 			findClosestTrianglesKernel.setArg(4, cubeReflect);
