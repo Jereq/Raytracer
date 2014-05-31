@@ -103,6 +103,7 @@
     <ClInclude Include="ObjModel.h" />
     <ClInclude Include="Pose.h" />
     <ClInclude Include="Skeleton.h" />
+    <ClInclude Include="TestSettings.h" />
     <ClInclude Include="TextureManager.h" />
     <ClInclude Include="TubeGenerator.h" />
     <ClInclude Include="Vertex.h" />

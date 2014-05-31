@@ -23,86 +23,9 @@
 #include "Model.h"
 #include "ModelPaths.h"
 #include "ObjModel.h"
+#include "TestSettings.h"
 #include "TextureManager.h"
 #include "TubeGenerator.h"
-
-struct TestSetting
-{
-	unsigned int threads;
-	unsigned int width;
-	unsigned int height;
-	unsigned int bounces;
-	unsigned int lights;
-	unsigned int triangles;
-};
-
-bool modelSetups[][NUM_MODELS] =
-{
-	{true, false, false, true, true},
-	{false},
-	{true},
-	{true, true},
-	{true, true, true},
-	{true, false, false, false, true},
-	{true, false, false, false, false, true},
-	{true, false, false, false, false, false, true},
-	{true, false, false, false, false, false, false, true},
-	{true, false, false, true},
-};
-
-TestSetting defaultSetting = { 32, 1024, 768, 1, 1, 0 };
-
-TestSetting testSettings[] =
-{
-	{32, 1024, 768, 4, 2, 0},
-	{64, 1024, 768, 4, 2, 0},
-	{128, 1024, 768, 4, 2, 0},
-	{256, 1024, 768, 4, 2, 0},
-
-	{32, 640,  480, 4, 2, 0},
-	{64,  640, 480, 4, 2, 0},
-	{128, 640, 480, 4, 2, 0},
-	{256, 640, 480, 4, 2, 0},
-
-	{128, 128, 128, 4, 2, 0},
-	{128, 800, 600, 4, 2, 0},
-	{128, 1024, 768, 4, 2, 0},
-	{128, 1280, 1024, 4, 2, 0},
-
-	{128, 1024, 768, 0, 2, 0},
-	{128, 1024, 768, 1, 2, 0},
-	{128, 1024, 768, 2, 2, 0},
-	{128, 1024, 768, 3, 2, 0},
-	{128, 1024, 768, 4, 2, 0},
-	{128, 1024, 768, 5, 2, 0},
-	{128, 1024, 768, 6, 2, 0},
-	{128, 1024, 768, 7, 2, 0},
-	{128, 1024, 768, 8, 2, 0},
-	{128, 1024, 768, 9, 2, 0},
-	{128, 1024, 768, 10, 2, 0},
-	{128, 1024, 768, 100, 2, 0},
-
-	{128, 1024, 768, 4, 1, 0},
-	{128, 1024, 768, 4, 2, 0},
-	{128, 1024, 768, 4, 3, 0},
-	{128, 1024, 768, 4, 4, 0},
-	{128, 1024, 768, 4, 7, 0},
-	{128, 1024, 768, 4, 10, 0},
-
-	{128, 1024, 768, 4, 2, 1},
-	{128, 1024, 768, 4, 2, 2},
-	{128, 1024, 768, 4, 2, 3},
-	{128, 1024, 768, 4, 2, 4},
-	{128, 1024, 768, 4, 2, 5},
-	{128, 1024, 768, 4, 2, 6},
-	{128, 320, 240, 4, 2, 2},
-	{128, 320, 240, 4, 2, 9},
-	{128, 320, 240, 4, 2, 5},
-	{128, 320, 240, 4, 2, 6},
-	{128, 320, 240, 4, 2, 7},
-	{128, 320, 240, 4, 2, 8},
-};
-static const unsigned int numTests = sizeof(testSettings) / sizeof(TestSetting);
 
 bool runningTests = false;
 const float timePerTest = 10.f;
@@ -839,7 +762,7 @@ void useSettings(const TestSetting& setting)
 	numLights = setting.lights;
 	updateSetting("NumLights", std::to_string(numLights));
 
-	bool* modelSetup = modelSetups[setting.triangles];
+	const bool* modelSetup = modelSetups[setting.triangles];
 	for (unsigned int i = 0; i < NUM_MODELS; ++i)
 	{
 		showModels[i] = modelSetup[i];

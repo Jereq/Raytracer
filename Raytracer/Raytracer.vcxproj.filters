@@ -108,6 +108,9 @@
     <ClInclude Include="ModelPaths.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="TestSettings.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="rayTracing.cl">
