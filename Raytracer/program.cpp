@@ -27,6 +27,7 @@
 #include "Settings.h"
 #include "TestSettings.h"
 #include "TextureManager.h"
+#include "Time.h"
 #include "TubeGenerator.h"
 
 bool runningTests = false;
@@ -262,50 +263,6 @@ void resizeWindowCallback(GLFWwindow* _window, int _width, int _height)
 	Settings::updateWindowSize(_width, _height);
 }
 
-std::vector<std::pair<std::string, uint64_t>> timers;
-unsigned int widestName = 0;
-std::chrono::high_resolution_clock::time_point prevTimingPoint;
-
-void initTimer()
-{
-	prevTimingPoint = std::chrono::high_resolution_clock::now();
-}
-
-void registerTimer(const std::string& _name, uint64_t _initVal = 0ui64)
-{
-	if (_name.size() > widestName)
-		widestName = _name.size();
-
-	timers.push_back(std::make_pair(_name, 0));
-}
-
-void incTime(const std::string& _name, uint64_t _nanoSeconds)
-{
-	for (auto& val : timers)
-	{
-		if (val.first == _name)
-		{
-			val.second += _nanoSeconds;
-			return;
-		}
-	}
-
-	registerTimer(_name, _nanoSeconds);
-}
-
-void incTime(const std::string& _name, const std::chrono::system_clock::duration& _duration)
-{
-	incTime(_name, std::chrono::duration_cast<std::chrono::nanoseconds>(_duration).count());
-}
-
-void incTime(const std::string& _name, const std::vector<cl::Event>& _events)
-{
-	for (const cl::Event& ev : _events)
-	{
-		incTime(_name, getExecutionTime(ev));
-	}
-}
-
 void openLogFile()
 {
 	if (logFile.is_open())
@@ -331,17 +288,12 @@ void printLogFileHeader()
 		logFile << ',' << Settings::settings[i].first;
 	}
 
-	for (unsigned int i = 0; i < timers.size(); i++)
+	for (unsigned int i = 0; i < Time::timers.size(); i++)
 	{
-		logFile << ',' << timers[i].first;
+		logFile << ',' << Time::timers[i].first;
 	}
 
 	logFile << std::endl;
-}
-
-void printTimerToConsole(const std::pair<std::string, uint64_t>& _timer, double _deltaTime)
-{
-	std::cout << std::left << std::setw(widestName) << _timer.first << ": " << std::right << std::setw(5) << toSeconds(_timer.second) * 100.0 / _deltaTime << "%" << std::endl;
 }
 
 void printSettingsToLogFile()
@@ -359,12 +311,12 @@ void printSettingsToLogFile()
 void printTimersAndReset()
 {
 	auto currentTime = std::chrono::high_resolution_clock::now();
-	auto deltaTime = currentTime - prevTimingPoint;
-	prevTimingPoint = currentTime;
+	auto deltaTime = currentTime - Time::prevTimingPoint;
+	Time::prevTimingPoint = currentTime;
 	
 	double d_deltaTime = std::chrono::duration<double>(deltaTime).count();
 
-	if (timers.empty())
+	if (Time::timers.empty())
 		return;
 
 	if (!logFile.is_open())
@@ -375,13 +327,13 @@ void printTimersAndReset()
 
 	printSettingsToLogFile();
 
-	for (unsigned int i = 0; i < timers.size(); i++)
+	for (unsigned int i = 0; i < Time::timers.size(); i++)
 	{
-		auto& val = timers[i];
+		auto& val = Time::timers[i];
 
 		if (!runningTests)
 		{
-			printTimerToConsole(timers[i], d_deltaTime);
+			Time::printTimerToConsole(Time::timers[i], d_deltaTime);
 		}
 		logFile << ',' << toSeconds(val.second);
 		
@@ -391,14 +343,6 @@ void printTimersAndReset()
 	logFile << std::endl;
 	
 	logFile.flush();
-}
-
-void resetTimers()
-{
-	for (auto& timer : timers)
-	{
-		timer.second = 0;
-	}
 }
 
 unsigned int leastMultiple(unsigned int _val, unsigned int _mul)
@@ -418,7 +362,7 @@ void runTests(float _deltaTime)
 			timeLeftInTest = timePerTest;
 			beforeTest = false;
 
-			resetTimers();
+			Time::resetTimers();
 			frames = 0;
 		}
 		else
@@ -541,7 +485,7 @@ int main(int argc, char** argv)
 		auto currentTime = std::chrono::high_resolution_clock::now();
 		auto prevTime = currentTime;
 		auto prevPrint = currentTime;
-		initTimer();
+		Time::initTimer();
 
 		TextureManager textureManager(context);
 
@@ -605,7 +549,7 @@ int main(int argc, char** argv)
 			prevTime = currentTime;
 			currentTime = std::chrono::high_resolution_clock::now();
 
-			incTime("Duration", currentTime - prevTime);
+			Time::incTime("Duration", currentTime - prevTime);
 			double deltaTime = dSec(currentTime - prevTime).count();
 
 			if (runningTests)
@@ -841,23 +785,23 @@ int main(int argc, char** argv)
 			window.drawFramebuffer();
 			auto drawEnd = std::chrono::high_resolution_clock::now();
 
-			incTime("Aquire objects", getExecutionTime(aqEvent));
-			incTime("Release objects", getExecutionTime(relEvent));
-			incTime("Write lights", getExecutionTime(writeLightsEvent));
-			incTime("Write spheres", getExecutionTime(writeLightsEvent));
-			incTime("Primary rays", getExecutionTime(primEvent));
-			incTime("Intersection Spheres", intersectSpheresEvents);
-			incTime("Intersection Triangles", triangleEvents);
-			incTime("Move rays", moveRaysEvents);
-			incTime("Rays to light", updateRaysToLights);
-			incTime("Shadow spheres", sphereShadowEvents);
-			incTime("Shadow triangles", triangleShadowEvents);
-			incTime("Accumulate colors", accumulateColorEvents);
-			incTime("Dump image", getExecutionTime(dumpEvent));
-
-			incTime("Total OpenCL", drawStart - startCL);
-			incTime("OpenCL enqueue work", endCL - startCL);
-			incTime("OpenGL blit and swap", drawEnd - drawStart);
+			Time::incTime("Aquire objects", aqEvent);
+			Time::incTime("Release objects", relEvent);
+			Time::incTime("Write lights", writeLightsEvent);
+			Time::incTime("Write spheres", writeLightsEvent);
+			Time::incTime("Primary rays", primEvent);
+			Time::incTime("Intersection Spheres", intersectSpheresEvents);
+			Time::incTime("Intersection Triangles", triangleEvents);
+			Time::incTime("Move rays", moveRaysEvents);
+			Time::incTime("Rays to light", updateRaysToLights);
+			Time::incTime("Shadow spheres", sphereShadowEvents);
+			Time::incTime("Shadow triangles", triangleShadowEvents);
+			Time::incTime("Accumulate colors", accumulateColorEvents);
+			Time::incTime("Dump image", dumpEvent);
+			
+			Time::incTime("Total OpenCL", drawStart - startCL);
+			Time::incTime("OpenCL enqueue work", endCL - startCL);
+			Time::incTime("OpenGL blit and swap", drawEnd - drawStart);
 		}
 	}
 	catch (const cl::Error& err)

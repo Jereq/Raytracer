@@ -89,6 +89,7 @@
     <ClCompile Include="Settings.cpp" />
     <ClCompile Include="Skeleton.cpp" />
     <ClCompile Include="TextureManager.cpp" />
+    <ClCompile Include="Time.cpp" />
     <ClCompile Include="TubeGenerator.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -109,6 +110,7 @@
     <ClInclude Include="Skeleton.h" />
     <ClInclude Include="TestSettings.h" />
     <ClInclude Include="TextureManager.h" />
+    <ClInclude Include="Time.h" />
     <ClInclude Include="TubeGenerator.h" />
     <ClInclude Include="Vertex.h" />
   </ItemGroup>
