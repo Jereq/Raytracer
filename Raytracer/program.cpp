@@ -21,48 +21,10 @@
 
 #include "AnimatedObjModel.h"
 #include "Model.h"
+#include "ModelPaths.h"
 #include "ObjModel.h"
 #include "TextureManager.h"
 #include "TubeGenerator.h"
-
-static const std::string fallbackModelPath = "resources/cube.obj";
-
-std::string modelNames[] = {
-	"resources/cubeInv.obj",
-	"resources/cube.obj",
-	"resources/12 tri.obj",
-	"resources/48 tri.obj",
-	"resources/192 tri.obj",
-	"resources/768 tri.obj",
-	"resources/3072 tri.obj",
-	"resources/bth.obj",
-	"resources/tube.obj",
-};
-const int NUM_MODELS = sizeof(modelNames) / sizeof(std::string);
-
-std::string modelDiffuseTextures[NUM_MODELS] = {
-	"resources/bthcolor.dds",
-	"resources/CubeMap_COLOR.png",
-	"resources/bthcolor.dds",
-	"resources/bthcolor.dds",
-	"resources/bthcolor.dds",
-	"resources/bthcolor.dds",
-	"resources/bthcolor.dds",
-	"resources/bthcolor.dds",
-	"resources/CubeMap_COLOR.png",
-};
-
-std::string modelNormalTextures[NUM_MODELS] = {
-	"resources/Bump.png",
-	"resources/CubeMap_NRM.png",
-	"resources/Default_NRM.png",
-	"resources/Default_NRM.png",
-	"resources/Default_NRM.png",
-	"resources/Default_NRM.png",
-	"resources/Default_NRM.png",
-	"resources/Default_NRM.png",
-	"resources/CubeMap_NRM.png",
-};
 
 struct TestSetting
 {
@@ -1032,22 +994,22 @@ int main(int argc, char** argv)
 		{
 			ObjModel obj;
 
-			if (!obj.Initialize(context, modelNames[i].c_str()))
+			if (!obj.Initialize(context, modelPaths[i].model.c_str()))
 			{
 				if (!obj.Initialize(context, fallbackModelPath.c_str()))
 				{
-					throw std::exception(("Failed to load model: " + modelNames[i]).c_str());
+					throw std::exception(("Failed to load model: " + modelPaths[i].model).c_str());
 				}
 				else
 				{
-					std::cout << "Warning: Failed to load model: " << modelNames[i] << ", using fallback model." << std::endl;
+					std::cout << "Warning: Failed to load model: " << modelPaths[i].model << ", using fallback model." << std::endl;
 				}
 			}
 			modelTriangleCount[i] = obj.GetVertexCount() / 3;
 			models[i].data.reset(new ModelData(obj.getBuffer(), obj.GetVertexCount()));
 			models[i].transformedVertices = cl::Buffer(context, CL_MEM_READ_ONLY, obj.GetVertexCount() * sizeof(Vertex));
-			models[i].diffuseMap = textureManager.loadTexture(modelDiffuseTextures[i]);
-			models[i].normalMap = textureManager.loadTexture(modelNormalTextures[i]);
+			models[i].diffuseMap = textureManager.loadTexture(modelPaths[i].diffuseTexture);
+			models[i].normalMap = textureManager.loadTexture(modelPaths[i].normalTexture);
 
 			modelInstances[i].model = &models[i];
 			modelInstances[i].world.setTranslation(modelPositions[i]);
@@ -1059,8 +1021,8 @@ int main(int argc, char** argv)
 
 		models[NUM_MODELS - 1].data = modelData;
 		models[NUM_MODELS - 1].transformedVertices = cl::Buffer(context, CL_MEM_READ_ONLY, modelData->getVertexCount() * sizeof(Vertex));
-		models[NUM_MODELS - 1].diffuseMap = textureManager.loadTexture(modelDiffuseTextures[NUM_MODELS - 1]);
-		models[NUM_MODELS - 1].normalMap = textureManager.loadTexture(modelNormalTextures[NUM_MODELS - 1]);
+		models[NUM_MODELS - 1].diffuseMap = textureManager.loadTexture(modelPaths[NUM_MODELS - 1].diffuseTexture);
+		models[NUM_MODELS - 1].normalMap = textureManager.loadTexture(modelPaths[NUM_MODELS - 1].normalTexture);
 
 		modelInstances[NUM_MODELS - 1].model = models + NUM_MODELS - 1;
 		modelInstances[NUM_MODELS - 1].world.setTranslation(modelPositions[NUM_MODELS - 1]);

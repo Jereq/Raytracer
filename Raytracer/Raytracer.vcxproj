@@ -98,6 +98,7 @@
     <ClInclude Include="GLWindow.h" />
     <ClInclude Include="ModelData.h" />
     <ClInclude Include="Model.h" />
+    <ClInclude Include="ModelPaths.h" />
     <ClInclude Include="MovingLight.h" />
     <ClInclude Include="ObjModel.h" />
     <ClInclude Include="Pose.h" />
