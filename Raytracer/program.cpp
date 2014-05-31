@@ -23,6 +23,7 @@
 #include "Model.h"
 #include "ModelPaths.h"
 #include "ObjModel.h"
+#include "Settings.h"
 #include "TestSettings.h"
 #include "TextureManager.h"
 #include "TubeGenerator.h"
@@ -35,7 +36,6 @@ unsigned int currentTest = 0;
 bool beforeTest;
 
 std::ofstream logFile;
-void useSettings(const TestSetting& setting);
 
 void startTests()
 {
@@ -44,7 +44,7 @@ void startTests()
 	timeLeftInTest = timeBeforeTest;
 	beforeTest = true;
 
-	useSettings(testSettings[0]);
+	Settings::useSettings(testSettings[0]);
 
 	logFile.close();
 }
@@ -184,12 +184,6 @@ glm::vec2 dir;
 double prevXPos, prevYPos;
 glm::vec2 rotation;
 
-const static unsigned int MAX_LIGHTS = 10;
-unsigned int numLights = 1;
-unsigned int numBounces = 1;
-float cubeReflect = 0.5f;
-float cubeReflectStep = 0.1f;
-
 const glm::vec3 modelPositions[NUM_MODELS] = {
 	glm::vec3(0.f, 0.f, 0.f),
 	glm::vec3(0.f, 0.f, 0.f),
@@ -226,38 +220,6 @@ const std::pair<glm::vec3, float> modelRotations[NUM_MODELS] = {
 	std::make_pair(glm::normalize(glm::vec3(0.f, 1.f, 0.f)), 15.f),
 };
 
-bool showModels[NUM_MODELS] = {true};
-unsigned int modelTriangleCount[NUM_MODELS];
-
-void updateSetting(const std::string& _name, const std::string& _value);
-
-void updateModelCount()
-{
-	unsigned int numModels = 0;
-	unsigned int numTriangles = 0;
-
-	for (unsigned int i = 0; i < NUM_MODELS; i++)
-	{
-		if (showModels[i])
-		{
-			numModels++;
-			numTriangles += modelTriangleCount[i];
-		}
-	}
-
-	updateSetting("NumModels", std::to_string(numModels));
-	updateSetting("NumTriangles", std::to_string(numTriangles));
-}
-
-unsigned int threadGroupSize = 32;
-cl::NDRange local2D(32, 1);
-cl::NDRange linearLocalSize(32);
-
-void useSettings(const TestSetting& setting);
-int superSampling = 1;
-bool sizeChanged = true;
-
-
 void keyCallback(GLFWwindow* _window, int _key, int _scanCode, int _action, int _mod)
 {
 	if (runningTests)
@@ -292,95 +254,56 @@ void keyCallback(GLFWwindow* _window, int _key, int _scanCode, int _action, int 
 	case GLFW_KEY_R:
 		if (_action == GLFW_PRESS)
 		{
-			numLights++;
-			if (numLights > MAX_LIGHTS)
-				numLights = MAX_LIGHTS;
-
-			updateSetting("NumLights", std::to_string(numLights));
+			Settings::increaseLights();
 		}
 		break;
 
 	case GLFW_KEY_F:
 		if (_action == GLFW_PRESS)
 		{
-			numLights--;
-			if (numLights < 1)
-				numLights = 1;
-
-			updateSetting("NumLights", std::to_string(numLights));
+			Settings::decreaseLights();
 		}
 		break;
 
 	case GLFW_KEY_T:
 		if (_action == GLFW_PRESS)
 		{
-			numBounces++;
-
-			updateSetting("NumBounces", std::to_string(numBounces));
+			Settings::increaseBounces();
 		}
 		break;
 
 	case GLFW_KEY_G:
 		if (_action == GLFW_PRESS)
 		{
-			if (numBounces > 1)
-				numBounces--;
-
-			updateSetting("NumBounces", std::to_string(numBounces));
+			Settings::decreaseBounces();
 		}
 		break;
 
 	case GLFW_KEY_Y:
 		if (_action == GLFW_PRESS)
 		{
-			cubeReflect += cubeReflectStep;
-			if (cubeReflect > 1.f)
-			{
-				cubeReflect = 1.f;
-			}
+			Settings::increaseCubeReflect();
 		}
 		break;
 
 	case GLFW_KEY_H:
 		if (_action == GLFW_PRESS)
 		{
-			cubeReflect -= cubeReflectStep;
-			if (cubeReflect < 0.f)
-			{
-				cubeReflect = 0.f;
-			}
+			Settings::decreaseCubeReflect();
 		}
 		break;
 
 	case GLFW_KEY_U:
 		if (_action == GLFW_PRESS)
 		{
-			static const unsigned int maxThreadGroupSize = 256;
-			if (threadGroupSize < maxThreadGroupSize)
-			{
-				threadGroupSize *= 2;
-				local2D = cl::NDRange(32, threadGroupSize / 32);
-				linearLocalSize = cl::NDRange(threadGroupSize);
-			
-				updateSetting("Local2DSize", std::to_string(local2D[0]) + "x" + std::to_string(local2D[1]));
-				updateSetting("LocalLinearSize", std::to_string(linearLocalSize[0]));
-			}
+			Settings::increaseThreadGroupSize();
 		}
 		break;
 
 	case GLFW_KEY_J:
 		if (_action == GLFW_PRESS)
 		{
-			static const unsigned int minThreadGroupSize = 32;
-			if (threadGroupSize > minThreadGroupSize)
-			{
-				threadGroupSize /= 2;
-				local2D = cl::NDRange(32, threadGroupSize / 32);
-				linearLocalSize = cl::NDRange(threadGroupSize);
-			
-				updateSetting("Local2DSize", std::to_string(local2D[0]) + "x" + std::to_string(local2D[1]));
-				updateSetting("LocalLinearSize", std::to_string(linearLocalSize[0]));
-			}
+			Settings::decreaseThreadGroupSize();
 		}
 		break;
 
@@ -394,19 +317,14 @@ void keyCallback(GLFWwindow* _window, int _key, int _scanCode, int _action, int 
 	case GLFW_KEY_I:
 		if (_action == GLFW_PRESS)
 		{
-			superSampling++;
-			sizeChanged = true;
+			Settings::increaseSuperSampling();
 		}
 		break;
 
 	case GLFW_KEY_K:
 		if (_action == GLFW_PRESS)
 		{
-			if(superSampling > 1)
-			{
-				superSampling--;
-				sizeChanged = true;
-			}
+			Settings::decreaseSuperSampling();
 		}
 		break;
 
@@ -414,9 +332,7 @@ void keyCallback(GLFWwindow* _window, int _key, int _scanCode, int _action, int 
 		if (_key >= GLFW_KEY_1 && _key < GLFW_KEY_1 + NUM_MODELS && _action == GLFW_PRESS)
 		{
 			int model = _key - GLFW_KEY_1;
-			showModels[model] = !showModels[model];
-
-			updateModelCount();
+			Settings::toggleShowModel(model);
 		}
 	}
 }
@@ -445,14 +361,9 @@ void cursorPosCallback(GLFWwindow* _window, double _xPos, double _yPos)
 		rotation.y = -90.f;
 }
 
-int windowWidth = 0;
-int windowHeight = 0;
-
 void resizeWindowCallback(GLFWwindow* _window, int _width, int _height)
 {
-	sizeChanged = true;
-	windowWidth = _width;
-	windowHeight = _height;
+	Settings::updateWindowSize(_width, _height);
 }
 
 cl_ulong getExecutionTime(const cl::Event& _event)
@@ -477,7 +388,6 @@ void glErr()
 }
 
 std::vector<std::pair<std::string, uint64_t>> timers;
-std::vector<std::pair<std::string, std::string>> settings;
 unsigned int widestName = 0;
 std::chrono::high_resolution_clock::time_point prevTimingPoint;
 
@@ -513,25 +423,6 @@ void incTime(const std::string& _name, const std::chrono::system_clock::duration
 	incTime(_name, std::chrono::duration_cast<std::chrono::nanoseconds>(_duration).count());
 }
 
-void updateSetting(const std::string& _name, const std::string& _value)
-{
-	for (auto& val : settings)
-	{
-		if (val.first == _name)
-		{
-			val.second = _value;
-			return;
-		}
-	}
-
-	settings.push_back(std::make_pair(_name, _value));
-}
-
-void updateSetting(const std::string& _name, float _value)
-{
-	updateSetting(_name, std::to_string(_value));
-}
-
 void incTime(const std::string& _name, const std::vector<cl::Event>& _events)
 {
 	for (const cl::Event& ev : _events)
@@ -556,13 +447,13 @@ void openLogFile()
 
 void printLogFileHeader()
 {
-	if (settings.empty())
+	if (Settings::settings.empty())
 		return;
 
-	logFile << settings[0].first;
-	for (unsigned int i = 1; i < settings.size(); i++)
+	logFile << Settings::settings[0].first;
+	for (unsigned int i = 1; i < Settings::settings.size(); i++)
 	{
-		logFile << ',' << settings[i].first;
+		logFile << ',' << Settings::settings[i].first;
 	}
 
 	for (unsigned int i = 0; i < timers.size(); i++)
@@ -580,13 +471,13 @@ void printTimerToConsole(const std::pair<std::string, uint64_t>& _timer, double 
 
 void printSettingsToLogFile()
 {
-	if (settings.empty())
+	if (Settings::settings.empty())
 		return;
 
-	logFile << settings[0].second;
-	for (unsigned int i = 1; i < settings.size(); i++)
+	logFile << Settings::settings[0].second;
+	for (unsigned int i = 1; i < Settings::settings.size(); i++)
 	{
-		logFile << ',' << settings[i].second;
+		logFile << ',' << Settings::settings[i].second;
 	}
 }
 
@@ -648,36 +539,6 @@ unsigned int leastMultiple(unsigned int _val, unsigned int _mul)
 	return ((_val + _mul - 1) / _mul) * _mul;
 }
 
-bool shouldChangeWindowSize = false;
-
-void useSettings(const TestSetting& setting)
-{
-	threadGroupSize = setting.threads;
-	local2D = cl::NDRange(32, threadGroupSize / 32);
-	linearLocalSize = cl::NDRange(threadGroupSize);
-			
-	updateSetting("Local2DSize", std::to_string(local2D[0]) + "x" + std::to_string(local2D[1]));
-	updateSetting("LocalLinearSize", std::to_string(linearLocalSize[0]));
-
-	windowWidth = setting.width;
-	windowHeight = setting.height;
-	shouldChangeWindowSize = true;
-
-	numBounces = setting.bounces;
-	updateSetting("NumBounces", std::to_string(numBounces));
-
-	numLights = setting.lights;
-	updateSetting("NumLights", std::to_string(numLights));
-
-	const bool* modelSetup = modelSetups[setting.triangles];
-	for (unsigned int i = 0; i < NUM_MODELS; ++i)
-	{
-		showModels[i] = modelSetup[i];
-	}
-
-	updateModelCount();
-}
-
 int frames = 0;
 
 void runTests(float _deltaTime)
@@ -699,14 +560,14 @@ void runTests(float _deltaTime)
 			if (currentTest >= numTests)
 			{
 				runningTests = false;
-				useSettings(defaultSetting);
+				Settings::useSettings(defaultSetting);
 				logFile.close();
 
 				return;
 			}
 
 			printTimersAndReset();
-			useSettings(testSettings[currentTest]);
+			Settings::useSettings(testSettings[currentTest]);
 			timeLeftInTest = timeBeforeTest;
 			beforeTest = true;
 		}
@@ -717,8 +578,8 @@ int main(int argc, char** argv)
 {
 	const static int width = 1024;
 	const static int height = 768;
-	windowWidth = width;
-	windowHeight = height;
+	Settings::updateWindowSize(width, height);
+
 	const static float speed = 2.f;
 
 	const static int NUM_SPHERES = 10;
@@ -730,12 +591,12 @@ int main(int argc, char** argv)
 
 	float animationTime = 0.f;
 
-	updateSetting("NumBounces", (float)numBounces);
-	updateSetting("NumLights", (float)numLights);
+	Settings::updateSetting("NumBounces", (float)Settings::numBounces);
+	Settings::updateSetting("NumLights", (float)Settings::numLights);
 	
 	try
 	{
-		GLWindow window(WINDOW_TITLE, windowWidth, windowHeight);
+		GLWindow window(WINDOW_TITLE, Settings::windowWidth, Settings::windowHeight);
 		window.setKeyCallback(&keyCallback);
 		window.setMouseCallback(&cursorPosCallback);
 		window.setFramebufferSizeCallback(&resizeWindowCallback);
@@ -745,7 +606,7 @@ int main(int argc, char** argv)
 		cl::CommandQueue queue;
 		initCL(context, devices, queue);
 
-		window.createFramebuffer(windowWidth, windowHeight);
+		window.createFramebuffer(Settings::windowWidth, Settings::windowHeight);
 		
 		cl::Program colorProgram = createProgramFromFile(context, devices, "writeImage.cl");
 		cl::Kernel accumulateColorKernel(colorProgram, "accumulateImage");
@@ -770,7 +631,7 @@ int main(int argc, char** argv)
 		cl::BufferRenderGL renderbuffer;
 		std::vector<cl::Memory> glObjects;
 
-		Camera camera(45.f, (float)windowWidth / (float)windowHeight);
+		Camera camera(45.f, (float)Settings::windowWidth / (float)Settings::windowHeight);
 		camera.setViewDirection(glm::vec3(0.f, 0.f, -1.f));
 		camera.setPosition(glm::vec3(0.f, 1.f, -2.f));
 
@@ -793,7 +654,7 @@ int main(int argc, char** argv)
 		findClosestSpheresKernel.setArg(4, 0);
 
 		std::vector<MovingLight> movLights;
-		for (unsigned int i = 0; i < MAX_LIGHTS; i++)
+		for (unsigned int i = 0; i < Settings::MAX_LIGHTS; i++)
 		{
 			movLights.push_back(MovingLight(glm::vec4(50.f, 50.f, 50.f, 0.f),
 				glm::vec4(i, 0.f, 9.f, 1.f), glm::vec4(i, 0.f, -9.f, 1.f), 1.f / (i + 1)));
@@ -835,7 +696,7 @@ int main(int argc, char** argv)
 					std::cout << "Warning: Failed to load model: " << modelPaths[i].model << ", using fallback model." << std::endl;
 				}
 			}
-			modelTriangleCount[i] = obj.GetVertexCount() / 3;
+			Settings::modelTriangleCount[i] = obj.GetVertexCount() / 3;
 			models[i].data.reset(new ModelData(obj.getBuffer(), obj.GetVertexCount()));
 			models[i].transformedVertices = cl::Buffer(context, CL_MEM_READ_ONLY, obj.GetVertexCount() * sizeof(Vertex));
 			models[i].diffuseMap = textureManager.loadTexture(modelPaths[i].diffuseTexture);
@@ -859,20 +720,20 @@ int main(int argc, char** argv)
 		modelInstances[NUM_MODELS - 1].world.setScale(glm::vec3(modelScales[NUM_MODELS - 1]));
 		modelInstances[NUM_MODELS - 1].skeleton = Skeleton(context, modelData->getBindPose());
 
-		updateModelCount();
+		Settings::updateModelCount();
 
 		cl::NDRange global2D;
 		cl::NDRange linearGlobalSize;
 		
-		updateSetting("Local2DSize", std::to_string(local2D[0]) + "x" + std::to_string(local2D[1]));
-		updateSetting("LocalLinearSize", std::to_string(linearLocalSize[0]));
+		Settings::updateSetting("Local2DSize", std::to_string(Settings::local2D[0]) + "x" + std::to_string(Settings::local2D[1]));
+		Settings::updateSetting("LocalLinearSize", std::to_string(Settings::linearLocalSize[0]));
 		
 		accumulateColorKernel.setArg(3, lightBuffer);
 
 		while (!window.shouldClose())
 		{
 			frames++;
-			updateSetting("NumFrames", (float)frames);
+			Settings::updateSetting("NumFrames", (float)frames);
 
 			prevTime = currentTime;
 			currentTime = std::chrono::high_resolution_clock::now();
@@ -895,33 +756,33 @@ int main(int argc, char** argv)
 				frames = 0;
 			}
 
-			if (shouldChangeWindowSize)
+			if (Settings::shouldChangeWindowSize)
 			{
-				window.setWindowSize(windowWidth, windowHeight);
-				shouldChangeWindowSize = false;
+				window.setWindowSize(Settings::windowWidth, Settings::windowHeight);
+				Settings::shouldChangeWindowSize = false;
 			}
 
-			if (sizeChanged)
+			if (Settings::sizeChanged)
 			{
-				sizeChanged = false;
+				Settings::sizeChanged = false;
 
-				window.updateFramebuffer(windowWidth, windowHeight);
+				window.updateFramebuffer(Settings::windowWidth, Settings::windowHeight);
 
-				updateSetting("WindowWidth", (float)windowWidth);
-				updateSetting("WindowHeight", (float)windowHeight);
+				Settings::updateSetting("WindowWidth", (float)Settings::windowWidth);
+				Settings::updateSetting("WindowHeight", (float)Settings::windowHeight);
 
 				renderbuffer = cl::BufferRenderGL(context, CL_MEM_READ_WRITE, window.getRenderbuffer());
 
 				glObjects.clear();
 				glObjects.push_back(renderbuffer);
 		
-				numRays = windowWidth * windowHeight * superSampling * superSampling;
+				numRays = Settings::windowWidth * Settings::windowHeight * Settings::superSampling * Settings::superSampling;
 				primaryRaysBuffer = cl::Buffer(context, CL_MEM_READ_WRITE, numRays * sizeof(Ray));
 				accumulationBuffer = cl::Buffer(context, CL_MEM_READ_WRITE, numRays * sizeof(cl_float4));
 
 				primaryRaysKernel.setArg(0, primaryRaysBuffer);
-				primaryRaysKernel.setArg(3, windowWidth * superSampling);
-				primaryRaysKernel.setArg(4, windowHeight * superSampling);
+				primaryRaysKernel.setArg(3, Settings::windowWidth * Settings::superSampling);
+				primaryRaysKernel.setArg(4, Settings::windowHeight * Settings::superSampling);
 				primaryRaysKernel.setArg(5, accumulationBuffer);
 				
 				findClosestSpheresKernel.setArg(0, primaryRaysBuffer);
@@ -950,11 +811,11 @@ int main(int argc, char** argv)
 				accumulateColorKernel.setArg(1, primaryRaysBuffer);
 				accumulateColorKernel.setArg(2, numRays);
 				
-				camera.setScreenRatio((float)windowWidth / (float)windowHeight);
+				camera.setScreenRatio((float)Settings::windowWidth / (float)Settings::windowHeight);
 			}
 			
-			global2D = cl::NDRange(leastMultiple(windowWidth, local2D[0]), leastMultiple(windowHeight, local2D[1]));
-			linearGlobalSize = cl::NDRange(leastMultiple(numRays, linearLocalSize[0]));
+			global2D = cl::NDRange(leastMultiple(Settings::windowWidth, Settings::local2D[0]), leastMultiple(Settings::windowHeight, Settings::local2D[1]));
+			linearGlobalSize = cl::NDRange(leastMultiple(numRays, Settings::linearLocalSize[0]));
 
 			if (dir != glm::vec2(0.f))
 			{
@@ -973,7 +834,7 @@ int main(int argc, char** argv)
 				bone.getLocalTransform().setOrientation(glm::quat(glm::rotate((sinf(animationTime) + 1.f) * 180.f / (aniBones.size() - 1), glm::vec3(0.f, 0.f, 1.f))));
 			}
 			
-			findClosestTrianglesKernel.setArg(4, cubeReflect);
+			findClosestTrianglesKernel.setArg(4, Settings::cubeReflect);
 
 			std::vector<Light> pointLights;
 			for (MovingLight& l : movLights)
@@ -982,7 +843,7 @@ int main(int argc, char** argv)
 				pointLights.push_back(l.light);
 			}
 
-			for (unsigned int i = 0; i < numLights; i++)
+			for (unsigned int i = 0; i < Settings::numLights; i++)
 			{
 				spheres[i].position = pointLights[i].position;
 				spheres[i].radius = 0.1f;
@@ -992,7 +853,7 @@ int main(int argc, char** argv)
 
 			cl::Event writeLightsEvent, writeSpheresEvent;
 			queue.enqueueWriteBuffer(lightBuffer, false, 0, sizeof(Light) * pointLights.size(), pointLights.data(), &events, &writeLightsEvent);
-			queue.enqueueWriteBuffer(spheresBuffer, false, 0, sizeof(Sphere) * numLights, spheres.data(), &events, &writeSpheresEvent);
+			queue.enqueueWriteBuffer(spheresBuffer, false, 0, sizeof(Sphere) * Settings::numLights, spheres.data(), &events, &writeSpheresEvent);
 
 			window.clearFramebuffer(1.f, 0.f, 0.f);
 			glFinish();
@@ -1011,14 +872,14 @@ int main(int argc, char** argv)
 			std::vector<cl::Event> moveRaysEvents;
 			std::vector<cl::Event> transformModelEvents;
 
-			cl::NDRange superSampledGlobal2D(global2D[0] * superSampling, global2D[1] * superSampling);
-			cl::Event primEvent = runKernel(queue, primaryRaysKernel, superSampledGlobal2D, local2D, events);
+			cl::NDRange superSampledGlobal2D(global2D[0] * Settings::superSampling, global2D[1] * Settings::superSampling);
+			cl::Event primEvent = runKernel(queue, primaryRaysKernel, superSampledGlobal2D, Settings::local2D, events);
 
 			for (unsigned int k = 0; k < NUM_MODELS; k++)
 			{
 				ModelInstance& model = modelInstances[k];
 
-				if (showModels[k])
+				if (Settings::showModels[k])
 				{
 					model.world.setOrientation(
 						glm::quat(glm::rotate(modelRotations[k].second * (float)deltaTime, modelRotations[k].first)) *
@@ -1035,7 +896,7 @@ int main(int argc, char** argv)
 						transformSkeletalVerticesKernel.setArg(2, model.skeleton.getTransformBuffer(queue));
 						int vertexCount = model.model->data->getVertexCount();
 						transformSkeletalVerticesKernel.setArg(3, vertexCount);
-						transformModelEvents.push_back(runKernel(queue, transformSkeletalVerticesKernel, cl::NDRange(leastMultiple(vertexCount, linearLocalSize[0])), linearLocalSize, events));
+						transformModelEvents.push_back(runKernel(queue, transformSkeletalVerticesKernel, cl::NDRange(leastMultiple(vertexCount, Settings::linearLocalSize[0])), Settings::linearLocalSize, events));
 					}
 					else
 					{
@@ -1047,51 +908,51 @@ int main(int argc, char** argv)
 						transformVerticesKernel.setArg(3, invTranspose);
 						int vertexCount = model.model->data->getVertexCount();
 						transformVerticesKernel.setArg(4, vertexCount);
-						transformModelEvents.push_back(runKernel(queue, transformVerticesKernel, cl::NDRange(leastMultiple(vertexCount, linearLocalSize[0])), linearLocalSize, events));
+						transformModelEvents.push_back(runKernel(queue, transformVerticesKernel, cl::NDRange(leastMultiple(vertexCount, Settings::linearLocalSize[0])), Settings::linearLocalSize, events));
 					}
 				}
 			}
 
-			for (unsigned int j = 0; j < numBounces; j++)
+			for (unsigned int j = 0; j < Settings::numBounces; j++)
 			{
-				intersectSpheresEvents.push_back(runKernel(queue, findClosestSpheresKernel, linearGlobalSize, linearLocalSize, events));
+				intersectSpheresEvents.push_back(runKernel(queue, findClosestSpheresKernel, linearGlobalSize, Settings::linearLocalSize, events));
 
 				for (unsigned int k = 0; k < NUM_MODELS; k++)
 				{
 					ModelInstance& model = modelInstances[k];
 
-					if (showModels[k])
+					if (Settings::showModels[k])
 					{
 						findClosestTrianglesKernel.setArg(2, model.model->transformedVertices);
 						findClosestTrianglesKernel.setArg(3, model.model->data->getVertexCount() / 3);
 						findClosestTrianglesKernel.setArg(5, model.model->diffuseMap);
 						findClosestTrianglesKernel.setArg(6, model.model->normalMap);
 						findClosestTrianglesKernel.setArg(7, k + 1);
-						triangleEvents.push_back(runKernel(queue, findClosestTrianglesKernel, linearGlobalSize, linearLocalSize, events));
+						triangleEvents.push_back(runKernel(queue, findClosestTrianglesKernel, linearGlobalSize, Settings::linearLocalSize, events));
 					}
 				}
-				moveRaysEvents.push_back(runKernel(queue, moveRaysToIntersectionKernel, linearGlobalSize, linearLocalSize, events));
+				moveRaysEvents.push_back(runKernel(queue, moveRaysToIntersectionKernel, linearGlobalSize, Settings::linearLocalSize, events));
 
-				for (unsigned int i = 0; i < numLights; i++)
+				for (unsigned int i = 0; i < Settings::numLights; i++)
 				{
 					updateRaysToLightKernel.setArg(3, i);
-					updateRaysToLights.push_back(runKernel(queue, updateRaysToLightKernel, linearGlobalSize, linearLocalSize, events));
-					sphereShadowEvents.push_back(runKernel(queue, detectShadowWithSpheres, linearGlobalSize, linearLocalSize, events));
+					updateRaysToLights.push_back(runKernel(queue, updateRaysToLightKernel, linearGlobalSize, Settings::linearLocalSize, events));
+					sphereShadowEvents.push_back(runKernel(queue, detectShadowWithSpheres, linearGlobalSize, Settings::linearLocalSize, events));
 					for (unsigned int k = 0; k < NUM_MODELS; k++)
 					{
 						ModelInstance& model = modelInstances[k];
 
-						if (showModels[k])
+						if (Settings::showModels[k])
 						{
 							detectShadowWithTriangles.setArg(2, model.model->transformedVertices);
 							detectShadowWithTriangles.setArg(3, model.model->data->getVertexCount() / 3);
 							detectShadowWithTriangles.setArg(4, k + 1);
-							triangleShadowEvents.push_back(runKernel(queue, detectShadowWithTriangles, linearGlobalSize, linearLocalSize, events));
+							triangleShadowEvents.push_back(runKernel(queue, detectShadowWithTriangles, linearGlobalSize, Settings::linearLocalSize, events));
 						}
 					}
 
 					accumulateColorKernel.setArg(4, i);
-					accumulateColorEvents.push_back(runKernel(queue, accumulateColorKernel, linearGlobalSize, linearLocalSize, events));
+					accumulateColorEvents.push_back(runKernel(queue, accumulateColorKernel, linearGlobalSize, Settings::linearLocalSize, events));
 				}
 			}
 
@@ -1099,8 +960,8 @@ int main(int argc, char** argv)
 			queue.enqueueAcquireGLObjects(&glObjects, &events, &aqEvent);
 			events.push_back(aqEvent);
 			
-			dumpImageKernel.setArg(3, superSampling);
-			cl::Event dumpEvent = runKernel(queue, dumpImageKernel, global2D, local2D, events);
+			dumpImageKernel.setArg(3, Settings::superSampling);
+			cl::Event dumpEvent = runKernel(queue, dumpImageKernel, global2D, Settings::local2D, events);
 
 			cl::Event relEvent;
 			queue.enqueueReleaseGLObjects(&glObjects, &events, &relEvent);
