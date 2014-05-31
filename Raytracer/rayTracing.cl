@@ -30,7 +30,7 @@ __kernel void primaryRays(__global Ray* _res, const mat4 _invMat, const float4 _
 	_res[id].totalStrength = 1.f;
 	_res[id].inShadow = false;
 	_res[id].collideGroup = -1;
-	_res[id].collideGroup = -1;
+	_res[id].collideObject = -1;
 
 	_accumulationBuffer[id] = (float4)(0.f, 0.f, 0.f, 0.f);
 }
@@ -143,6 +143,11 @@ __kernel void moveRaysToIntersection(__global Ray* _rays, int _numRays)
 	int id = get_global_id(0);
 	if (id >= _numRays)
 		return;
+
+	if (_rays[id].distance == INFINITY)
+	{
+		return;
+	}
 
 	Ray r = _rays[id];
 
